@@ -1,0 +1,63 @@
+# ============================================================
+# DeepRQI — root .gitignore
+# Covers all three services (ai-service, backend, frontend)
+# since they live as sibling folders in one repo.
+# ============================================================
+
+# ---- Environment files (never commit real secrets/connection strings) ----
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# ---- Python / FastAPI (deeprqi-ai-service) ----
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Model weights — large binaries, don't belong in git.
+# best.pt gets copied in locally after Colab training; MODEL_PATH in .env
+# points at it wherever you keep it, so it never needs to be committed.
+*.pt
+*.pth
+*.onnx
+*.weights
+runs/                 # Ultralytics training run outputs, if ever run locally
+
+# ---- Node / Express (deeprqi-backend) ----
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Prisma generates this into node_modules, but be safe if that ever changes
+/generated/
+
+# ---- React / Vite (deeprqi-frontend) ----
+dist/
+dist-ssr/
+*.local
+
+# ---- Uploaded / generated images (don't belong in git) ----
+uploads/
+*.jpg
+*.jpeg
+*.png
+*.gif
+!deeprqi-frontend/public/**   # keep any real static assets you add later
+
+# ---- OS / editor cruft ----
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# ---- Logs ----
+*.log
+logs/

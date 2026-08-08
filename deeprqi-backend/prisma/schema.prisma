@@ -1,0 +1,98 @@
+// Phase 1 schema — the 5 tables from the build spec.
+// Phase 2 addition: PostGIS geography column on Road for spatial queries
+// ("roads within 5km"). Prisma can't natively type geography columns, so
+// it's declared Unsupported() here and queried via $queryRaw in roads.js —
+// the location column itself is still fully managed by Prisma migrations.
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  ADMIN
+  INSPECTOR
+}
+
+model User {
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(INSPECTOR)
+  createdAt    DateTime @default(now())
+
+  uploadedImages RoadImage[]
+
+  @@map("users")
+}
+
+model Road {
+  id       String  @id @default(uuid())
+  roadName String
+  city     String?
+  district String?
+  state    String?
+
+  // Plain floats for easy reads/serialization in JS.
+  lat Float?
+  lng Float?
+
+  // The actual spatial column ST_DWithin etc. run against. Kept in sync
+  // with lat/lng by the app layer whenever a road's location is set
+  // (see setRoadLocation in roads.js).
+  location Unsupported("geography(Point,4326)")?
+
+  images RoadImage[]
+  scores RqiScore[]
+
+  @@map("roads")
+}
+
+model RoadImage {
+  id         String   @id @default(uuid())
+  roadId     String
+  road       Road     @relation(fields: [roadId], references: [id])
+  uploadedById String
+  uploadedBy User     @relation(fields: [uploadedById], references: [id])
+  imagePath  String
+  lat        Float?
+  lng        Float?
+  uploadedAt DateTime @default(now())
+
+  detections Detection[]
+  scores     RqiScore[]
+
+  @@map("road_images")
+}
+
+model Detection {
+  id         String   @id @default(uuid())
+  imageId    String
+  image      RoadImage @relation(fields: [imageId], references: [id])
+  damageType String
+  confidence Float
+  severity   String
+  bbox       Json     // [xmin, ymin, xmax, ymax]
+
+  @@map("detections")
+}
+
+model RqiScore {
+  id          String   @id @default(uuid())
+  roadId      String
+  road        Road     @relation(fields: [roadId], references: [id])
+  imageId     String
+  image       RoadImage @relation(fields: [imageId], references: [id])
+  score       Float
+  category    String
+  totalPenalty Float
+  breakdown   Json     // per-detection penalty audit trail
+  generatedAt DateTime @default(now())
+
+  @@map("rqi_scores")
+}
