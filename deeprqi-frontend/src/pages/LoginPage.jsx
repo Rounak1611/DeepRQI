@@ -23,7 +23,7 @@ export default function LoginPage() {
       } else {
         await register(name, email, password);
       }
-      navigate("/upload");
+      navigate("/dashboard");
     } catch (err) {
       setError(err.response?.data?.error || "Something went wrong. Try again.");
     } finally {

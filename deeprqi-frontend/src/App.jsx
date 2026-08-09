@@ -4,6 +4,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import LoginPage from "./pages/LoginPage";
 import UploadPage from "./pages/UploadPage";
 import ResultsPage from "./pages/ResultsPage";
+import DashboardPage from "./pages/DashboardPage";
 
 function Topbar() {
   const { user, logout } = useAuth();
@@ -17,6 +18,9 @@ function Topbar() {
       </div>
       {user && (
         <div className="topbar__nav">
+          <Link to="/dashboard" style={{ color: "var(--text-muted)", textDecoration: "none" }}>
+            Dashboard
+          </Link>
           <Link to="/upload" style={{ color: "var(--text-muted)", textDecoration: "none" }}>
             New Inspection
           </Link>
@@ -33,7 +37,15 @@ function AppRoutes() {
 
   return (
     <Routes>
-      <Route path="/login" element={user ? <Navigate to="/upload" /> : <LoginPage />} />
+      <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <LoginPage />} />
+      <Route
+        path="/dashboard"
+        element={
+          <ProtectedRoute>
+            <DashboardPage />
+          </ProtectedRoute>
+        }
+      />
       <Route
         path="/upload"
         element={
@@ -50,7 +62,7 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
-      <Route path="*" element={<Navigate to={user ? "/upload" : "/login"} />} />
+      <Route path="*" element={<Navigate to={user ? "/dashboard" : "/login"} />} />
     </Routes>
   );
 }

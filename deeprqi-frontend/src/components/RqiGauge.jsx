@@ -2,14 +2,7 @@
 // bands returned by the backend exactly: 0-25 Critical ... 85-100 Good.
 // Score maps left (0, critical, red) to right (100, good, green), like a
 // fuel gauge read as "how much road quality is left."
-
-const BANDS = [
-  { min: 0, max: 25, color: "var(--critical)", label: "Critical" },
-  { min: 25, max: 40, color: "var(--very-poor)", label: "Very Poor" },
-  { min: 40, max: 60, color: "var(--poor)", label: "Poor" },
-  { min: 60, max: 85, color: "var(--fair)", label: "Fair" },
-  { min: 85, max: 100, color: "var(--good)", label: "Good" },
-];
+import { RQI_BANDS as BANDS, bandForScore } from "../utils/rqiBands";
 
 const CX = 120;
 const CY = 120;
@@ -39,7 +32,7 @@ function arcPath(startScore, endScore, radius) {
 export default function RqiGauge({ score, category }) {
   const needleAngle = scoreToAngle(score);
   const needleTip = polarToCartesian(CX, CY, R - 14, needleAngle);
-  const activeBand = BANDS.find((b) => score >= b.min && score <= b.max) || BANDS[0];
+  const activeBand = bandForScore(score);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>

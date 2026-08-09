@@ -1,0 +1,350 @@
+diff --git a/deeprqi-frontend/package.json b/deeprqi-frontend/package.json
+index 03c2b16..9cc66f5 100644
+--- a/deeprqi-frontend/package.json
++++ b/deeprqi-frontend/package.json
+@@ -10,8 +10,10 @@
+   },
+   "dependencies": {
+     "axios": "^1.7.7",
++    "leaflet": "^1.9.4",
+     "react": "^18.3.1",
+     "react-dom": "^18.3.1",
++    "react-leaflet": "^4.2.1",
+     "react-router-dom": "^6.26.2"
+   },
+   "devDependencies": {
+diff --git a/deeprqi-frontend/src/App.jsx b/deeprqi-frontend/src/App.jsx
+index e1b7696..b85fcf8 100644
+--- a/deeprqi-frontend/src/App.jsx
++++ b/deeprqi-frontend/src/App.jsx
+@@ -4,6 +4,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
+ import LoginPage from "./pages/LoginPage";
+ import UploadPage from "./pages/UploadPage";
+ import ResultsPage from "./pages/ResultsPage";
++import DashboardPage from "./pages/DashboardPage";
+ 
+ function Topbar() {
+   const { user, logout } = useAuth();
+@@ -17,6 +18,9 @@ function Topbar() {
+       </div>
+       {user && (
+         <div className="topbar__nav">
++          <Link to="/dashboard" style={{ color: "var(--text-muted)", textDecoration: "none" }}>
++            Dashboard
++          </Link>
+           <Link to="/upload" style={{ color: "var(--text-muted)", textDecoration: "none" }}>
+             New Inspection
+           </Link>
+@@ -33,7 +37,15 @@ function AppRoutes() {
+ 
+   return (
+     <Routes>
+-      <Route path="/login" element={user ? <Navigate to="/upload" /> : <LoginPage />} />
++      <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <LoginPage />} />
++      <Route
++        path="/dashboard"
++        element={
++          <ProtectedRoute>
++            <DashboardPage />
++          </ProtectedRoute>
++        }
++      />
+       <Route
+         path="/upload"
+         element={
+@@ -50,7 +62,7 @@ function AppRoutes() {
+           </ProtectedRoute>
+         }
+       />
+-      <Route path="*" element={<Navigate to={user ? "/upload" : "/login"} />} />
++      <Route path="*" element={<Navigate to={user ? "/dashboard" : "/login"} />} />
+     </Routes>
+   );
+ }
+diff --git a/deeprqi-frontend/src/api/client.js b/deeprqi-frontend/src/api/client.js
+index 34831d5..80b84f0 100644
+--- a/deeprqi-frontend/src/api/client.js
++++ b/deeprqi-frontend/src/api/client.js
+@@ -39,4 +39,19 @@ export async function uploadImage(file, meta) {
+   return data;
+ }
+ 
++export async function getRoads() {
++  const { data } = await client.get("/api/roads");
++  return data;
++}
++
++export async function getDashboardStats() {
++  const { data } = await client.get("/api/dashboard/stats");
++  return data;
++}
++
++export async function getRoad(id) {
++  const { data } = await client.get(`/api/roads/${id}`);
++  return data;
++}
++
+ export default client;
+diff --git a/deeprqi-frontend/src/components/RqiGauge.jsx b/deeprqi-frontend/src/components/RqiGauge.jsx
+index 191cfcd..91080c8 100644
+--- a/deeprqi-frontend/src/components/RqiGauge.jsx
++++ b/deeprqi-frontend/src/components/RqiGauge.jsx
+@@ -2,14 +2,7 @@
+ // bands returned by the backend exactly: 0-25 Critical ... 85-100 Good.
+ // Score maps left (0, critical, red) to right (100, good, green), like a
+ // fuel gauge read as "how much road quality is left."
+-
+-const BANDS = [
+-  { min: 0, max: 25, color: "var(--critical)", label: "Critical" },
+-  { min: 25, max: 40, color: "var(--very-poor)", label: "Very Poor" },
+-  { min: 40, max: 60, color: "var(--poor)", label: "Poor" },
+-  { min: 60, max: 85, color: "var(--fair)", label: "Fair" },
+-  { min: 85, max: 100, color: "var(--good)", label: "Good" },
+-];
++import { RQI_BANDS as BANDS, bandForScore } from "../utils/rqiBands";
+ 
+ const CX = 120;
+ const CY = 120;
+@@ -39,7 +32,7 @@ function arcPath(startScore, endScore, radius) {
+ export default function RqiGauge({ score, category }) {
+   const needleAngle = scoreToAngle(score);
+   const needleTip = polarToCartesian(CX, CY, R - 14, needleAngle);
+-  const activeBand = BANDS.find((b) => score >= b.min && score <= b.max) || BANDS[0];
++  const activeBand = bandForScore(score);
+ 
+   return (
+     <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+@@ -56,6 +49,7 @@ export default function RqiGauge({ score, category }) {
+           />
+         ))}
+ 
++        {/* tick marks at 0/25/40/60/85/100 */}
+         {[0, 25, 40, 60, 85, 100].map((tick) => {
+           const p1 = polarToCartesian(CX, CY, R + 10, scoreToAngle(tick));
+           const p2 = polarToCartesian(CX, CY, R + 2, scoreToAngle(tick));
+@@ -72,6 +66,7 @@ export default function RqiGauge({ score, category }) {
+           );
+         })}
+ 
++        {/* needle */}
+         <line
+           x1={CX}
+           y1={CY}
+diff --git a/deeprqi-frontend/src/components/StatsCards.jsx b/deeprqi-frontend/src/components/StatsCards.jsx
+new file mode 100644
+index 0000000..f1965d7
+--- /dev/null
++++ b/deeprqi-frontend/src/components/StatsCards.jsx
+@@ -0,0 +1,39 @@
++import { bandForScore } from "../utils/rqiBands";
++
++function Card({ label, value, valueColor }) {
++  return (
++    <div className="panel" style={{ padding: "18px 22px", flex: 1 }}>
++      <div style={{ fontSize: "12px", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
++        {label}
++      </div>
++      <div
++        className="mono"
++        style={{ fontSize: "30px", fontWeight: 600, marginTop: "6px", color: valueColor || "var(--text-primary)" }}
++      >
++        {value}
++      </div>
++    </div>
++  );
++}
++
++export default function StatsCards({ stats }) {
++  if (!stats) return null;
++
++  const avgBand = stats.avgScore != null ? bandForScore(stats.avgScore) : null;
++
++  return (
++    <div style={{ display: "flex", gap: "16px", marginBottom: "24px" }}>
++      <Card label="Total Roads" value={stats.totalRoads} />
++      <Card
++        label="Avg RQI"
++        value={stats.avgScore != null ? stats.avgScore : "—"}
++        valueColor={avgBand?.color}
++      />
++      <Card
++        label="Critical Roads"
++        value={stats.criticalCount}
++        valueColor={stats.criticalCount > 0 ? "var(--critical)" : "var(--good)"}
++      />
++    </div>
++  );
++}
+diff --git a/deeprqi-frontend/src/main.jsx b/deeprqi-frontend/src/main.jsx
+index c7f517d..8c71925 100644
+--- a/deeprqi-frontend/src/main.jsx
++++ b/deeprqi-frontend/src/main.jsx
+@@ -1,6 +1,7 @@
+ import React from "react";
+ import ReactDOM from "react-dom/client";
+ import App from "./App.jsx";
++import "leaflet/dist/leaflet.css";
+ import "./styles/global.css";
+ 
+ ReactDOM.createRoot(document.getElementById("root")).render(
+diff --git a/deeprqi-frontend/src/pages/DashboardPage.jsx b/deeprqi-frontend/src/pages/DashboardPage.jsx
+new file mode 100644
+index 0000000..bd00e52
+--- /dev/null
++++ b/deeprqi-frontend/src/pages/DashboardPage.jsx
+@@ -0,0 +1,121 @@
++import { useEffect, useState, useMemo } from "react";
++import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
++import L from "leaflet";
++import { getRoads, getDashboardStats } from "../api/client";
++import { bandForScore } from "../utils/rqiBands";
++import StatsCards from "../components/StatsCards";
++
++// Leaflet's default marker image paths break under most bundlers (Vite
++// included) because it expects them relative to the CSS file, not the JS
++// module graph. A colored divIcon sidesteps that entirely -- no broken
++// image requests, and it doubles as the RQI-band color coding for free.
++function bandIcon(color) {
++  return L.divIcon({
++    className: "",
++    html: `<div style="
++      width: 16px; height: 16px; border-radius: 50%;
++      background: ${color}; border: 2px solid #17191c;
++      box-shadow: 0 0 0 1px rgba(255,255,255,0.4);
++    "></div>`,
++    iconSize: [16, 16],
++    iconAnchor: [8, 8],
++  });
++}
++
++const DEFAULT_CENTER = [20.5937, 78.9629]; // India centroid, fallback only
++const DEFAULT_ZOOM = 5;
++
++export default function DashboardPage() {
++  const [roads, setRoads] = useState([]);
++  const [stats, setStats] = useState(null);
++  const [loading, setLoading] = useState(true);
++  const [error, setError] = useState("");
++
++  useEffect(() => {
++    let cancelled = false;
++
++    async function load() {
++      try {
++        const [roadsData, statsData] = await Promise.all([getRoads(), getDashboardStats()]);
++        if (!cancelled) {
++          setRoads(roadsData);
++          setStats(statsData);
++        }
++      } catch (err) {
++        if (!cancelled) setError("Could not load dashboard data. Is the backend running?");
++      } finally {
++        if (!cancelled) setLoading(false);
++      }
++    }
++
++    load();
++    return () => {
++      cancelled = true;
++    };
++  }, []);
++
++  const mappedRoads = roads.filter((r) => r.lat != null && r.lng != null);
++
++  const center = useMemo(() => {
++    if (mappedRoads.length === 0) return DEFAULT_CENTER;
++    const avgLat = mappedRoads.reduce((s, r) => s + r.lat, 0) / mappedRoads.length;
++    const avgLng = mappedRoads.reduce((s, r) => s + r.lng, 0) / mappedRoads.length;
++    return [avgLat, avgLng];
++  }, [mappedRoads]);
++
++  return (
++    <div className="main">
++      <h2 style={{ fontSize: "22px", marginBottom: "20px" }}>Dashboard</h2>
++
++      {error && <div className="error-banner">{error}</div>}
++      {loading && <p style={{ color: "var(--text-muted)" }}>Loading…</p>}
++
++      {!loading && !error && (
++        <>
++          <StatsCards stats={stats} />
++
++          <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
++            <MapContainer
++              center={center}
++              zoom={mappedRoads.length ? 12 : DEFAULT_ZOOM}
++              style={{ height: "480px", width: "100%" }}
++            >
++              {/* OpenStreetMap tiles -- free, no API key, no billing setup. */}
++              <TileLayer
++                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
++                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
++              />
++              {mappedRoads.map((road) => {
++                const band = road.latestScore ? bandForScore(road.latestScore.score) : null;
++                const color = band ? band.color : "#8b9096"; // grey = no score yet
++                return (
++                  <Marker key={road.id} position={[road.lat, road.lng]} icon={bandIcon(color)}>
++                    <Popup>
++                      <strong>{road.roadName}</strong>
++                      <br />
++                      {[road.city, road.district, road.state].filter(Boolean).join(", ") || "—"}
++                      <br />
++                      {road.latestScore ? (
++                        <>
++                          RQI: <strong>{Math.round(road.latestScore.score)}</strong> ({road.latestScore.category})
++                        </>
++                      ) : (
++                        "No inspections yet"
++                      )}
++                    </Popup>
++                  </Marker>
++                );
++              })}
++            </MapContainer>
++          </div>
++
++          {roads.length > mappedRoads.length && (
++            <p style={{ color: "var(--text-muted)", fontSize: "12px", marginTop: "10px" }}>
++              {roads.length - mappedRoads.length} road(s) not shown — no GPS coordinates recorded yet.
++            </p>
++          )}
++        </>
++      )}
++    </div>
++  );
++}
+diff --git a/deeprqi-frontend/src/pages/LoginPage.jsx b/deeprqi-frontend/src/pages/LoginPage.jsx
+index 0f7c5b7..bcf7e3a 100644
+--- a/deeprqi-frontend/src/pages/LoginPage.jsx
++++ b/deeprqi-frontend/src/pages/LoginPage.jsx
+@@ -23,7 +23,7 @@ export default function LoginPage() {
+       } else {
+         await register(name, email, password);
+       }
+-      navigate("/upload");
++      navigate("/dashboard");
+     } catch (err) {
+       setError(err.response?.data?.error || "Something went wrong. Try again.");
+     } finally {
+diff --git a/deeprqi-frontend/src/utils/rqiBands.js b/deeprqi-frontend/src/utils/rqiBands.js
+new file mode 100644
+index 0000000..f775b85
+--- /dev/null
++++ b/deeprqi-frontend/src/utils/rqiBands.js
+@@ -0,0 +1,15 @@
++// Single source of truth for RQI band colors/labels, matching the
++// backend's RQI_BANDS exactly. Used by RqiGauge (the dial) and the
++// dashboard map (marker colors) so they can never drift apart.
++
++export const RQI_BANDS = [
++  { min: 0, max: 25, color: "var(--critical)", label: "Critical" },
++  { min: 25, max: 40, color: "var(--very-poor)", label: "Very Poor" },
++  { min: 40, max: 60, color: "var(--poor)", label: "Poor" },
++  { min: 60, max: 85, color: "var(--fair)", label: "Fair" },
++  { min: 85, max: 100, color: "var(--good)", label: "Good" },
++];
++
++export function bandForScore(score) {
++  return RQI_BANDS.find((b) => score >= b.min && score <= b.max) || RQI_BANDS[0];
++}

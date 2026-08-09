@@ -39,4 +39,19 @@ export async function uploadImage(file, meta) {
   return data;
 }
 
+export async function getRoads() {
+  const { data } = await client.get("/api/roads");
+  return data;
+}
+
+export async function getDashboardStats() {
+  const { data } = await client.get("/api/dashboard/stats");
+  return data;
+}
+
+export async function getRoad(id) {
+  const { data } = await client.get(`/api/roads/${id}`);
+  return data;
+}
+
 export default client;
