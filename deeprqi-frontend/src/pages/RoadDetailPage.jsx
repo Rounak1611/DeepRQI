@@ -1,0 +1,167 @@
+import { useEffect, useState } from "react";
+import { useParams, useNavigate, Link } from "react-router-dom";
+import { getRoad } from "../api/client";
+import RqiGauge from "../components/RqiGauge";
+import RqiTrendChart from "../components/RqiTrendChart";
+import { bandForScore } from "../utils/rqiBands";
+
+export default function RoadDetailPage() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const [road, setRoad] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const data = await getRoad(id);
+        if (!cancelled) setRoad(data);
+      } catch (err) {
+        if (!cancelled) setError("Could not load this road. It may not exist.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  if (loading) {
+    return (
+      <div className="main">
+        <p style={{ color: "var(--text-muted)" }}>Loading…</p>
+      </div>
+    );
+  }
+
+  if (error || !road) {
+    return (
+      <div className="main">
+        <div className="error-banner">{error || "Road not found."}</div>
+        <Link to="/dashboard" className="btn-primary" style={{ display: "inline-block", marginTop: "16px" }}>
+          Back to dashboard
+        </Link>
+      </div>
+    );
+  }
+
+  // road.images comes back newest-first from the backend; each has .scores[]
+  // (usually one score per image in Phase 1/2). Flatten into a single
+  // chronological inspection history and reverse for the trend chart.
+  const inspections = road.images
+    .map((img) => ({
+      imageId: img.id,
+      uploadedAt: img.uploadedAt,
+      uploadedByName: img.uploadedBy?.name,
+      detectionCount: img.detections.length,
+      score: img.scores[0] || null,
+    }))
+    .filter((i) => i.score);
+
+  const trendPoints = [...inspections].reverse().map((i) => ({
+    score: i.score.score,
+    generatedAt: i.score.generatedAt,
+  }));
+
+  const latest = inspections[0]?.score;
+
+  return (
+    <div className="main">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "24px" }}>
+        <div>
+          <h2 style={{ fontSize: "22px" }}>{road.roadName}</h2>
+          <p style={{ color: "var(--text-muted)", fontSize: "13px", marginTop: "4px" }}>
+            {[road.city, road.district, road.state].filter(Boolean).join(", ") || "No location details"}
+            {road.lat && road.lng && (
+              <span className="mono"> · {road.lat.toFixed(4)}, {road.lng.toFixed(4)}</span>
+            )}
+          </p>
+        </div>
+        <button
+          onClick={() => navigate("/dashboard")}
+          style={{
+            background: "none",
+            border: "1px solid var(--line)",
+            color: "var(--text-muted)",
+            padding: "8px 16px",
+            borderRadius: "3px",
+            fontSize: "13px",
+          }}
+        >
+          Back to dashboard
+        </button>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1.4fr", gap: "20px", marginBottom: "20px" }}>
+        <div className="panel" style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+          <h3 style={{ fontSize: "13px", color: "var(--text-muted)", marginBottom: "6px", alignSelf: "flex-start" }}>
+            Current RQI
+          </h3>
+          {latest ? (
+            <RqiGauge score={latest.score} category={latest.category} />
+          ) : (
+            <p style={{ color: "var(--text-muted)", fontSize: "14px" }}>No inspections recorded yet.</p>
+          )}
+        </div>
+
+        <div className="panel">
+          <h3 style={{ fontSize: "13px", color: "var(--text-muted)", marginBottom: "14px" }}>
+            RQI over time ({trendPoints.length} inspection{trendPoints.length === 1 ? "" : "s"})
+          </h3>
+          {trendPoints.length > 0 ? (
+            <RqiTrendChart points={trendPoints} />
+          ) : (
+            <p style={{ color: "var(--text-muted)", fontSize: "14px" }}>Not enough data for a trend yet.</p>
+          )}
+        </div>
+      </div>
+
+      <div className="panel">
+        <h3 style={{ fontSize: "13px", color: "var(--text-muted)", marginBottom: "14px" }}>
+          Inspection history
+        </h3>
+        {inspections.length === 0 ? (
+          <p style={{ color: "var(--text-muted)", fontSize: "14px" }}>No inspections yet.</p>
+        ) : (
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid var(--line)", textAlign: "left" }}>
+                <th style={{ padding: "8px 6px", color: "var(--text-muted)", fontWeight: 500 }}>Date</th>
+                <th style={{ padding: "8px 6px", color: "var(--text-muted)", fontWeight: 500 }}>Inspector</th>
+                <th style={{ padding: "8px 6px", color: "var(--text-muted)", fontWeight: 500 }}>Detections</th>
+                <th style={{ padding: "8px 6px", color: "var(--text-muted)", fontWeight: 500, textAlign: "right" }}>
+                  RQI
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {inspections.map((insp) => {
+                const band = bandForScore(insp.score.score);
+                return (
+                  <tr key={insp.imageId} style={{ borderBottom: "1px solid var(--line)" }}>
+                    <td className="mono" style={{ padding: "8px 6px" }}>
+                      {new Date(insp.uploadedAt).toLocaleDateString()}
+                    </td>
+                    <td style={{ padding: "8px 6px" }}>{insp.uploadedByName || "—"}</td>
+                    <td className="mono" style={{ padding: "8px 6px" }}>{insp.detectionCount}</td>
+                    <td className="mono" style={{ padding: "8px 6px", textAlign: "right", color: band.color }}>
+                      {Math.round(insp.score.score)} · {insp.score.category}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+        <p style={{ color: "var(--text-muted)", fontSize: "12px", marginTop: "14px" }}>
+          Photo thumbnails aren't shown here — Phase 1/2 doesn't persist uploaded images to storage,
+          only the analysis results. Add cloud image storage in Phase 3 to enable this.
+        </p>
+      </div>
+    </div>
+  );
+}

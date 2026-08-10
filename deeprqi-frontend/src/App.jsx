@@ -5,6 +5,7 @@ import LoginPage from "./pages/LoginPage";
 import UploadPage from "./pages/UploadPage";
 import ResultsPage from "./pages/ResultsPage";
 import DashboardPage from "./pages/DashboardPage";
+import RoadDetailPage from "./pages/RoadDetailPage";
 
 function Topbar() {
   const { user, logout } = useAuth();
@@ -43,6 +44,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <DashboardPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/roads/:id"
+        element={
+          <ProtectedRoute>
+            <RoadDetailPage />
           </ProtectedRoute>
         }
       />

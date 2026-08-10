@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from "react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import { Link } from "react-router-dom";
 import L from "leaflet";
 import { getRoads, getDashboardStats } from "../api/client";
 import { bandForScore } from "../utils/rqiBands";
@@ -102,6 +103,8 @@ export default function DashboardPage() {
                       ) : (
                         "No inspections yet"
                       )}
+                      <br />
+                      <Link to={`/roads/${road.id}`}>View history →</Link>
                     </Popup>
                   </Marker>
                 );
