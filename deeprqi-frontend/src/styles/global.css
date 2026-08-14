@@ -170,7 +170,8 @@ button {
   color: var(--text-muted);
 }
 
-.field input {
+.field input,
+.field select {
   background: var(--bg-road);
   border: 1px solid var(--line);
   color: var(--text-primary);
@@ -178,7 +179,8 @@ button {
   border-radius: var(--radius);
 }
 
-.field input:focus {
+.field input:focus,
+.field select:focus {
   border-color: var(--accent-dim);
 }
 

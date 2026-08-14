@@ -7,6 +7,7 @@ export default function LoginPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [role, setRole] = useState("INSPECTOR");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -18,12 +19,15 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
     try {
+      let loggedInUser;
       if (mode === "login") {
-        await login(email, password);
+        loggedInUser = await login(email, password);
       } else {
-        await register(name, email, password);
+        loggedInUser = await register(name, email, password, role);
       }
-      navigate("/dashboard");
+      // INSPECTOR has no dashboard access (Milestone 10) -- send each role
+      // to a landing page it can actually see.
+      navigate(loggedInUser.role === "ADMIN" ? "/dashboard" : "/upload");
     } catch (err) {
       setError(err.response?.data?.error || "Something went wrong. Try again.");
     } finally {
@@ -85,6 +89,15 @@ export default function LoginPage() {
                   onChange={(e) => setName(e.target.value)}
                   required
                 />
+              </div>
+            )}
+            {mode === "register" && (
+              <div className="field">
+                <label htmlFor="role">Role</label>
+                <select id="role" value={role} onChange={(e) => setRole(e.target.value)}>
+                  <option value="INSPECTOR">Inspector (field upload)</option>
+                  <option value="ADMIN">Admin (dashboard)</option>
+                </select>
               </div>
             )}
             <div className="field">

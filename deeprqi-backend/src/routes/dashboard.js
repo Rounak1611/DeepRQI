@@ -1,13 +1,15 @@
 const express = require("express");
 const prisma = require("../lib/prisma");
-const { requireAuth } = require("../middleware/auth");
+const { requireAuth, requireRole } = require("../middleware/auth");
 
 const router = express.Router();
 
-// GET /api/dashboard/stats
+// GET /api/dashboard/stats -- ADMIN-only (Milestone 10). The dashboard is
+// the aggregate/prioritization view; per the project spec that's an
+// administrator's job, not a field inspector's.
 // Total roads, average RQI, and critical-road count -- all computed off
 // each road's *latest* score, not every score ever recorded.
-router.get("/stats", requireAuth, async (req, res) => {
+router.get("/stats", requireAuth, requireRole("ADMIN"), async (req, res) => {
 	const totalRoads = await prisma.road.count();
 
 	const latest = await prisma.$queryRaw`

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { getRoad, getRoadReportBlob } from "../api/client";
+import { useAuth } from "../context/AuthContext";
 import RqiGauge from "../components/RqiGauge";
 import RqiTrendChart from "../components/RqiTrendChart";
 import { bandForScore } from "../utils/rqiBands";
@@ -8,6 +9,10 @@ import { bandForScore } from "../utils/rqiBands";
 export default function RoadDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  // Milestone 10: INSPECTOR has no dashboard route to go "back" to.
+  const backPath = user?.role === "ADMIN" ? "/dashboard" : "/upload";
+  const backLabel = user?.role === "ADMIN" ? "Back to dashboard" : "Back to upload";
   const [road, setRoad] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -65,8 +70,8 @@ export default function RoadDetailPage() {
     return (
       <div className="main">
         <div className="error-banner">{error || "Road not found."}</div>
-        <Link to="/dashboard" className="btn-primary" style={{ display: "inline-block", marginTop: "16px" }}>
-          Back to dashboard
+        <Link to={backPath} className="btn-primary" style={{ display: "inline-block", marginTop: "16px" }}>
+          {backLabel}
         </Link>
       </div>
     );
@@ -117,7 +122,7 @@ export default function RoadDetailPage() {
             {reportDownloading ? "Generating…" : "Download report"}
           </button>
           <button
-            onClick={() => navigate("/dashboard")}
+            onClick={() => navigate(backPath)}
             style={{
               background: "none",
               border: "1px solid var(--line)",
@@ -127,7 +132,7 @@ export default function RoadDetailPage() {
               fontSize: "13px",
             }}
           >
-            Back to dashboard
+            {backLabel}
           </button>
         </div>
       </div>

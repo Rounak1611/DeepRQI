@@ -19,9 +19,11 @@ function Topbar() {
       </div>
       {user && (
         <div className="topbar__nav">
-          <Link to="/dashboard" style={{ color: "var(--text-muted)", textDecoration: "none" }}>
-            Dashboard
-          </Link>
+          {user.role === "ADMIN" && (
+            <Link to="/dashboard" style={{ color: "var(--text-muted)", textDecoration: "none" }}>
+              Dashboard
+            </Link>
+          )}
           <Link to="/upload" style={{ color: "var(--text-muted)", textDecoration: "none" }}>
             New Inspection
           </Link>
@@ -35,14 +37,18 @@ function Topbar() {
 
 function AppRoutes() {
   const { user } = useAuth();
+  // Milestone 10: ADMIN lands on the dashboard (aggregate view), INSPECTOR
+  // lands on upload (field work) -- neither role has a route it can't reach
+  // from its own default landing page.
+  const homePath = user ? (user.role === "ADMIN" ? "/dashboard" : "/upload") : "/login";
 
   return (
     <Routes>
-      <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <LoginPage />} />
+      <Route path="/login" element={user ? <Navigate to={homePath} /> : <LoginPage />} />
       <Route
         path="/dashboard"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute roles={["ADMIN"]}>
             <DashboardPage />
           </ProtectedRoute>
         }
@@ -71,7 +77,7 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
-      <Route path="*" element={<Navigate to={user ? "/dashboard" : "/login"} />} />
+      <Route path="*" element={<Navigate to={homePath} />} />
     </Routes>
   );
 }
