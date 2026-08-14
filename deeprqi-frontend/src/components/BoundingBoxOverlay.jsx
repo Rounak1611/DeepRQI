@@ -67,7 +67,7 @@ export default function BoundingBoxOverlay({ imageUrl, detections, naturalWidth,
                 whiteSpace: "nowrap",
               }}
             >
-              {d.damage_type.replace(/_/g, " ")} · {(d.confidence * 100).toFixed(0)}%
+              {(d.damage_type ?? d.damageType ?? "unknown").replace(/_/g, " ")} · {(d.confidence * 100).toFixed(0)}%
             </span>
           </div>
         );
