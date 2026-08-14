@@ -35,19 +35,32 @@ export default function ResultsPage() {
             )}
           </p>
         </div>
-        <button
-          onClick={() => navigate("/upload")}
-          style={{
-            background: "none",
-            border: "1px solid var(--line)",
-            color: "var(--text-muted)",
-            padding: "8px 16px",
-            borderRadius: "3px",
-            fontSize: "13px",
-          }}
-        >
-          New inspection
-        </button>
+        <div style={{ display: "flex", gap: "10px" }}>
+          {/* This is the only route to the road's history/report from the
+              upload flow -- without it there was no way to reach the
+              "Download report" button on RoadDetailPage right after an
+              inspection (Dashboard is ADMIN-only as of Milestone 10). */}
+          <Link
+            to={`/roads/${road.id}`}
+            className="btn-primary"
+            style={{ padding: "8px 16px", borderRadius: "3px", fontSize: "13px", textDecoration: "none" }}
+          >
+            View history & report
+          </Link>
+          <button
+            onClick={() => navigate("/upload")}
+            style={{
+              background: "none",
+              border: "1px solid var(--line)",
+              color: "var(--text-muted)",
+              padding: "8px 16px",
+              borderRadius: "3px",
+              fontSize: "13px",
+            }}
+          >
+            New inspection
+          </button>
+        </div>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: "20px" }}>
