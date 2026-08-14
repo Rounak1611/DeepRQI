@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { getRoad } from "../api/client";
+import { getRoad, getRoadReportBlob } from "../api/client";
 import RqiGauge from "../components/RqiGauge";
 import RqiTrendChart from "../components/RqiTrendChart";
 import { bandForScore } from "../utils/rqiBands";
@@ -11,6 +11,29 @@ export default function RoadDetailPage() {
   const [road, setRoad] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [reportDownloading, setReportDownloading] = useState(false);
+  const [reportError, setReportError] = useState("");
+
+  async function handleDownloadReport() {
+    setReportError("");
+    setReportDownloading(true);
+    try {
+      const blob = await getRoadReportBlob(id);
+      const url = window.URL.createObjectURL(blob);
+      const safeName = road.roadName.replace(/[^a-z0-9]/gi, "_");
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${safeName}_report.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setReportError("Could not generate the report. Try again.");
+    } finally {
+      setReportDownloading(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -81,19 +104,32 @@ export default function RoadDetailPage() {
             )}
           </p>
         </div>
-        <button
-          onClick={() => navigate("/dashboard")}
-          style={{
-            background: "none",
-            border: "1px solid var(--line)",
-            color: "var(--text-muted)",
-            padding: "8px 16px",
-            borderRadius: "3px",
-            fontSize: "13px",
-          }}
-        >
-          Back to dashboard
-        </button>
+        <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+          {reportError && (
+            <span style={{ color: "var(--critical, #c0392b)", fontSize: "12px" }}>{reportError}</span>
+          )}
+          <button
+            onClick={handleDownloadReport}
+            disabled={reportDownloading}
+            className="btn-primary"
+            style={{ padding: "8px 16px", borderRadius: "3px", fontSize: "13px" }}
+          >
+            {reportDownloading ? "Generating…" : "Download report"}
+          </button>
+          <button
+            onClick={() => navigate("/dashboard")}
+            style={{
+              background: "none",
+              border: "1px solid var(--line)",
+              color: "var(--text-muted)",
+              padding: "8px 16px",
+              borderRadius: "3px",
+              fontSize: "13px",
+            }}
+          >
+            Back to dashboard
+          </button>
+        </div>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1.4fr", gap: "20px", marginBottom: "20px" }}>

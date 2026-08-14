@@ -1,6 +1,7 @@
 const express = require("express");
 const prisma = require("../lib/prisma");
 const { findRoadsNear } = require("../lib/geo");
+const { writeRoadReportPdf } = require("../lib/pdfReport");
 const { requireAuth } = require("../middleware/auth");
 
 const router = express.Router();
@@ -16,9 +17,9 @@ router.get("/", requireAuth, async (req, res) => {
 	// DISTINCT ON gets the latest score per road in a single query instead
 	// of N+1 lookups.
 	const latestScores = await prisma.$queryRaw`
-    SELECT DISTINCT ON ("roadId") "roadId", score, category, "generatedAt"
+    SELECT DISTINCT ON (road_id) road_id AS "roadId", score, category, generated_at AS "generatedAt"
     FROM rqi_scores
-    ORDER BY "roadId", "generatedAt" DESC
+    ORDER BY road_id, generated_at DESC
   `;
 	const scoreByRoad = Object.fromEntries(latestScores.map((s) => [s.roadId, s]));
 
@@ -68,6 +69,28 @@ router.get("/:id", requireAuth, async (req, res) => {
 
 	if (!road) return res.status(404).json({ error: "Road not found." });
 	res.json(road);
+});
+
+// GET /api/roads/:id/report -- PDF inspection report (Milestone 9). Same
+// underlying query/shape as the detail route above, laid out for printing
+// or sharing rather than for the dashboard UI.
+router.get("/:id/report", requireAuth, async (req, res) => {
+	const road = await prisma.road.findUnique({
+		where: { id: req.params.id },
+		include: {
+			images: {
+				orderBy: { uploadedAt: "desc" },
+				include: { detections: true, scores: true, uploadedBy: { select: { name: true } } },
+			},
+		},
+	});
+
+	if (!road) return res.status(404).json({ error: "Road not found." });
+
+	const safeName = road.roadName.replace(/[^a-z0-9]/gi, "_");
+	res.setHeader("Content-Type", "application/pdf");
+	res.setHeader("Content-Disposition", `attachment; filename="${safeName}_report.pdf"`);
+	writeRoadReportPdf(road, res);
 });
 
 module.exports = router;

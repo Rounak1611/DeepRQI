@@ -54,4 +54,11 @@ export async function getRoad(id) {
   return data;
 }
 
+// responseType: "blob" -- this is a PDF, not JSON, so axios must not try
+// to parse the body as text/JSON.
+export async function getRoadReportBlob(id) {
+  const { data } = await client.get(`/api/roads/${id}/report`, { responseType: "blob" });
+  return data;
+}
+
 export default client;

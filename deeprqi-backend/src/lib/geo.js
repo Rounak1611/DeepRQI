@@ -8,12 +8,15 @@ const prisma = require("./prisma");
 async function setRoadLocation(roadId, lat, lng) {
   if (lat == null || lng == null) return;
 
+  // road_id is TEXT (Prisma-generated uuid stored as string), not the
+  // Postgres uuid type -- no ::uuid cast here, or the comparison fails
+  // with "operator does not exist: text = uuid".
   await prisma.$executeRaw`
     UPDATE roads
     SET lat = ${lat},
         lng = ${lng},
         location = ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326)::geography
-    WHERE id = ${roadId}::uuid
+    WHERE road_id = ${roadId}
   `;
 }
 
@@ -26,7 +29,7 @@ async function findRoadsNear(lat, lng, radiusKm) {
   const radiusMeters = radiusKm * 1000;
   return prisma.$queryRaw`
     SELECT
-      id, "roadName", city, district, state, lat, lng,
+      road_id AS id, road_name AS "roadName", city, district, state, lat, lng,
       ST_Distance(location, ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326)::geography) AS distance_m
     FROM roads
     WHERE location IS NOT NULL

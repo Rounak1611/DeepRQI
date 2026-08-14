@@ -11,9 +11,9 @@ router.get("/stats", requireAuth, async (req, res) => {
 	const totalRoads = await prisma.road.count();
 
 	const latest = await prisma.$queryRaw`
-    SELECT DISTINCT ON ("roadId") "roadId", score, category
+    SELECT DISTINCT ON (road_id) road_id AS "roadId", score, category
     FROM rqi_scores
-    ORDER BY "roadId", "generatedAt" DESC
+    ORDER BY road_id, generated_at DESC
   `;
 
 	const scoredRoads = latest.length;

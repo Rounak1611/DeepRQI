@@ -1,8 +1,14 @@
 // Phase 1 schema — the 5 tables from the build spec.
 // Phase 2 addition: PostGIS geography column on Road for spatial queries
 // ("roads within 5km"). Prisma can't natively type geography columns, so
-// it's declared Unsupported() here and queried via $queryRaw in roads.js —
+// it's declared Unsupported() here and queried via $queryRaw in geo.js —
 // the location column itself is still fully managed by Prisma migrations.
+//
+// All fields are camelCase for JS ergonomics; every field is explicitly
+// @map'd to a snake_case DB column. The raw SQL in lib/geo.js,
+// routes/roads.js, and routes/dashboard.js depends on these exact
+// column names — do not change a @map value without updating those
+// queries too (see PROJECT_CONTEXT.md "Important Constraints").
 
 datasource db {
   provider = "postgresql"
@@ -26,18 +32,25 @@ model User {
   role         Role     @default(INSPECTOR)
   createdAt    DateTime @default(now()) @map("created_at")
 
-  uploadedImages RoadImage[]
+  uploadedImages RoadImage[] @relation("UploadedBy")
 
   @@map("users")
 }
 
 model Road {
-  id       String      @id @default(uuid()) @map("road_id")
-  roadName String      @map("road_name")
+  id       String  @id @default(uuid()) @map("road_id")
+  roadName String  @map("road_name")
   city     String?
-  // ... keep other existing fields
-  images   RoadImage[]
-  scores   RqiScore[]
+  district String?
+  state    String?
+  lat      Float?
+  lng      Float?
+  // Written/read only via raw SQL in lib/geo.js — Prisma can't natively
+  // write or query PostGIS geography columns.
+  location Unsupported("geography(Point, 4326)")?
+
+  images RoadImage[]
+  scores RqiScore[]
 
   @@map("roads")
 }
@@ -47,12 +60,15 @@ model RoadImage {
   roadId       String   @map("road_id")
   uploadedById String   @map("uploaded_by")
   imagePath    String   @map("image_path")
+  lat          Float?
+  lng          Float?
   uploadedAt   DateTime @default(now()) @map("uploaded_at")
-  User         User?    @relation(fields: [userId], references: [id])
-  userId       String?
-  Road         Road     @relation(fields: [roadId], references: [id])
 
-  // ... keep other existing fields
+  road       Road        @relation(fields: [roadId], references: [id])
+  uploadedBy User        @relation("UploadedBy", fields: [uploadedById], references: [id])
+  detections Detection[]
+  scores     RqiScore[]
+
   @@map("road_images")
 }
 
@@ -60,8 +76,12 @@ model Detection {
   id         String @id @default(uuid()) @map("detection_id")
   imageId    String @map("image_id")
   damageType String @map("damage_type")
+  confidence Float
+  severity   String
+  bbox       Json
 
-  // ... keep other existing fields
+  image RoadImage @relation(fields: [imageId], references: [id])
+
   @@map("detections")
 }
 
@@ -69,10 +89,14 @@ model RqiScore {
   id           String   @id @default(uuid()) @map("rqi_id")
   roadId       String   @map("road_id")
   imageId      String   @map("image_id")
+  score        Float
+  category     String
   totalPenalty Float    @map("total_penalty")
+  breakdown    Json
   generatedAt  DateTime @default(now()) @map("generated_at")
-  Road         Road     @relation(fields: [roadId], references: [id])
 
-  // ... keep other existing fields
+  road  Road      @relation(fields: [roadId], references: [id])
+  image RoadImage @relation(fields: [imageId], references: [id])
+
   @@map("rqi_scores")
 }
