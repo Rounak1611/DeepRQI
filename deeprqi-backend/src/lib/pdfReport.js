@@ -81,7 +81,7 @@ function writeRoadReportPdf(road, stream) {
 
 	doc.moveDown(1.5);
 	doc.fontSize(8).fillColor("#999").text(
-		"Photo thumbnails are not included in this report -- image storage is not yet implemented in this phase.",
+		"Photo thumbnails are not embedded in this report -- view them on the road's detail page in the app.",
 	);
 
 	doc.end();

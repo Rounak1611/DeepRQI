@@ -83,6 +83,7 @@ export default function RoadDetailPage() {
   const inspections = road.images
     .map((img) => ({
       imageId: img.id,
+      imagePath: img.imagePath,
       uploadedAt: img.uploadedAt,
       uploadedByName: img.uploadedBy?.name,
       detectionCount: img.detections.length,
@@ -171,6 +172,7 @@ export default function RoadDetailPage() {
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
             <thead>
               <tr style={{ borderBottom: "1px solid var(--line)", textAlign: "left" }}>
+                <th style={{ padding: "8px 6px", color: "var(--text-muted)", fontWeight: 500 }}>Photo</th>
                 <th style={{ padding: "8px 6px", color: "var(--text-muted)", fontWeight: 500 }}>Date</th>
                 <th style={{ padding: "8px 6px", color: "var(--text-muted)", fontWeight: 500 }}>Inspector</th>
                 <th style={{ padding: "8px 6px", color: "var(--text-muted)", fontWeight: 500 }}>Detections</th>
@@ -184,6 +186,21 @@ export default function RoadDetailPage() {
                 const band = bandForScore(insp.score.score);
                 return (
                   <tr key={insp.imageId} style={{ borderBottom: "1px solid var(--line)" }}>
+                    <td style={{ padding: "8px 6px" }}>
+                      <Link to={`/results/${insp.imageId}`}>
+                        <img
+                          src={insp.imagePath}
+                          alt=""
+                          style={{
+                            width: "56px",
+                            height: "40px",
+                            objectFit: "cover",
+                            borderRadius: "3px",
+                            display: "block",
+                          }}
+                        />
+                      </Link>
+                    </td>
                     <td className="mono" style={{ padding: "8px 6px" }}>
                       {new Date(insp.uploadedAt).toLocaleDateString()}
                     </td>
@@ -198,10 +215,6 @@ export default function RoadDetailPage() {
             </tbody>
           </table>
         )}
-        <p style={{ color: "var(--text-muted)", fontSize: "12px", marginTop: "14px" }}>
-          Photo thumbnails aren't shown here — Phase 1/2 doesn't persist uploaded images to storage,
-          only the analysis results. Add cloud image storage in Phase 3 to enable this.
-        </p>
       </div>
     </div>
   );

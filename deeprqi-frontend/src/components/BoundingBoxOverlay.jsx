@@ -7,15 +7,26 @@ const SEVERITY_COLOR = {
   critical: "var(--critical)",
 };
 
-export default function BoundingBoxOverlay({ imageUrl, detections, naturalWidth, naturalHeight }) {
+// naturalWidth/naturalHeight used to be required props sourced from the AI
+// service's response, which meant they were unavailable on refetch (they
+// were never persisted). The loaded <img> element already exposes its own
+// natural dimensions -- reading them there works identically whether the
+// src is a local blob URL (fresh upload) or a remote Supabase URL
+// (refresh/direct link), and needs no schema change.
+export default function BoundingBoxOverlay({ imageUrl, detections }) {
   const imgRef = useRef(null);
   const [displaySize, setDisplaySize] = useState({ width: 0, height: 0 });
+  const [naturalSize, setNaturalSize] = useState({ width: 0, height: 0 });
 
   const measure = () => {
     if (imgRef.current) {
       setDisplaySize({
         width: imgRef.current.clientWidth,
         height: imgRef.current.clientHeight,
+      });
+      setNaturalSize({
+        width: imgRef.current.naturalWidth,
+        height: imgRef.current.naturalHeight,
       });
     }
   };
@@ -25,8 +36,8 @@ export default function BoundingBoxOverlay({ imageUrl, detections, naturalWidth,
     return () => window.removeEventListener("resize", measure);
   }, []);
 
-  const scaleX = naturalWidth ? displaySize.width / naturalWidth : 1;
-  const scaleY = naturalHeight ? displaySize.height / naturalHeight : 1;
+  const scaleX = naturalSize.width ? displaySize.width / naturalSize.width : 1;
+  const scaleY = naturalSize.height ? displaySize.height / naturalSize.height : 1;
 
   return (
     <div style={{ position: "relative", display: "inline-block", width: "100%" }}>

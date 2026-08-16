@@ -60,6 +60,10 @@ model RoadImage {
   roadId       String   @map("road_id")
   uploadedById String   @map("uploaded_by")
   imagePath    String   @map("image_path")
+  // Milestone 11: public Supabase Storage URL for the persisted EigenCAM
+  // heatmap PNG. Nullable -- older rows predate this, and images saved
+  // as "pending analysis" (AI service was down) never got a heatmap.
+  heatmapPath  String?  @map("heatmap_path")
   lat          Float?
   lng          Float?
   uploadedAt   DateTime @default(now()) @map("uploaded_at")

@@ -123,3 +123,38 @@ Per the spec, the upload isn't silently lost: the image record is still
 saved (marked with no detections yet) and the response comes back as a
 `502` telling you to retry, with the `imageId` so you can find it later.
 A proper retry queue is explicitly a Phase 2 upgrade, not needed yet.
+
+## Milestone 11 — image + heatmap storage (Supabase Storage)
+
+Uploaded road photos and their EigenCAM heatmaps are now persisted to
+Supabase Storage instead of being discarded after inference. This is
+what unblocks thumbnails on the road detail page and makes
+`GET /api/images/:id` (and therefore `/results/:imageId` on the
+frontend) work after a page refresh or a shared link.
+
+### One-time bucket setup
+
+1. In your Supabase project: **Storage → New bucket**
+2. Name it `road-images` (or whatever you set `SUPABASE_STORAGE_BUCKET`
+   to) and toggle **Public bucket** on — road photos aren't sensitive,
+   and a public bucket means the backend can hand back plain URLs
+   instead of managing signed-URL expiry/refresh.
+3. In **Project Settings → API**, copy the **Project URL** and the
+   **`service_role`** key (not the `anon`/public key — this one bypasses
+   row-level security and must stay server-side only).
+
+Add to `.env`:
+```
+SUPABASE_URL="https://your-project.supabase.co"
+SUPABASE_SERVICE_ROLE_KEY="..."
+SUPABASE_STORAGE_BUCKET="road-images"
+```
+
+### Migration
+
+```bash
+npm run prisma:migrate
+```
+This is purely additive (`ALTER TABLE road_images ADD COLUMN
+heatmap_path TEXT`) — no reset needed, existing rows just get a `NULL`
+heatmap until they're re-inspected.

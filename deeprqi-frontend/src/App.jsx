@@ -70,7 +70,7 @@ function AppRoutes() {
         }
       />
       <Route
-        path="/results"
+        path="/results/:imageId"
         element={
           <ProtectedRoute>
             <ResultsPage />

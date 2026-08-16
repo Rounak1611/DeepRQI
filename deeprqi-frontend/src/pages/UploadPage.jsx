@@ -55,7 +55,7 @@ export default function UploadPage() {
     setError("");
     try {
       const result = await uploadImage(file, { roadName, city, lat, lng });
-      navigate("/results", { state: { result, previewUrl } });
+      navigate(`/results/${result.image.id}`, { state: { result, previewUrl } });
     } catch (err) {
       setError(err.response?.data?.error || "Upload failed. Check the AI service is running.");
     } finally {

@@ -2,18 +2,22 @@ const express = require("express");
 const multer = require("multer");
 const axios = require("axios");
 const FormData = require("form-data");
+const crypto = require("crypto");
 const prisma = require("../lib/prisma");
 const { requireAuth } = require("../middleware/auth");
 const { setRoadLocation } = require("../lib/geo");
+const { uploadBuffer } = require("../lib/storage");
 
 const router = express.Router();
 
-// Keep the upload in memory -- we just forward the bytes to FastAPI and
-// store a reference path, we don't need the file to touch disk here.
+// Keep the upload in memory -- we forward the bytes to FastAPI AND persist
+// them to Supabase Storage (Milestone 11); no need to touch local disk.
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB cap
 });
+
+const EXT_BY_MIME = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
 
 router.post("/upload", requireAuth, upload.single("file"), async (req, res) => {
   if (!req.file) {
@@ -44,7 +48,18 @@ router.post("/upload", requireAuth, upload.single("file"), async (req, res) => {
       road.lng = parseFloat(lng);
     }
 
-    // 2. Forward the image to the FastAPI AI service (Milestone 3).
+    // 2. Persist the original photo to Supabase Storage regardless of what
+    // happens next -- even a "pending analysis" image (AI service down)
+    // should have a real, viewable photo behind it, not just a filename.
+    const ext = EXT_BY_MIME[req.file.mimetype] || "jpg";
+    const uploadToken = crypto.randomUUID();
+    const originalUrl = await uploadBuffer(
+      req.file.buffer,
+      `roads/${road.id}/${uploadToken}-original.${ext}`,
+      req.file.mimetype
+    );
+
+    // 3. Forward the image to the FastAPI AI service (Milestone 3).
     const form = new FormData();
     form.append("file", req.file.buffer, {
       filename: req.file.originalname,
@@ -65,7 +80,7 @@ router.post("/upload", requireAuth, upload.single("file"), async (req, res) => {
         data: {
           roadId: road.id,
           uploadedById: req.user.id,
-          imagePath: req.file.originalname,
+          imagePath: originalUrl,
           lat: lat ? parseFloat(lat) : null,
           lng: lng ? parseFloat(lng) : null,
         },
@@ -76,15 +91,23 @@ router.post("/upload", requireAuth, upload.single("file"), async (req, res) => {
       });
     }
 
-    const { detections, rqi, heatmap_base64, image_width, image_height } = aiResponse.data;
+    const { detections, rqi, heatmap_base64 } = aiResponse.data;
 
-    // 3. Persist everything in one place so the RQI number is always
+    // 4. Persist the heatmap PNG too, alongside the original photo.
+    const heatmapUrl = await uploadBuffer(
+      Buffer.from(heatmap_base64, "base64"),
+      `roads/${road.id}/${uploadToken}-heatmap.png`,
+      "image/png"
+    );
+
+    // 5. Persist everything in one place so the RQI number is always
     // traceable back to the exact image + detections that produced it.
     const roadImage = await prisma.roadImage.create({
       data: {
         roadId: road.id,
         uploadedById: req.user.id,
-        imagePath: req.file.originalname,
+        imagePath: originalUrl,
+        heatmapPath: heatmapUrl,
         lat: lat ? parseFloat(lat) : null,
         lng: lng ? parseFloat(lng) : null,
         detections: {
@@ -110,13 +133,12 @@ router.post("/upload", requireAuth, upload.single("file"), async (req, res) => {
       },
     });
 
+    // heatmap/original are now persisted URLs on `image` -- no need to
+    // also ship the raw base64 heatmap in the response.
     res.status(201).json({
       road,
       image: roadImage,
       rqi: rqiScore,
-      heatmap_base64,
-      image_width,
-      image_height,
     });
   } catch (err) {
     console.error(err);

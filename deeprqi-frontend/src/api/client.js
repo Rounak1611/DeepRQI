@@ -39,6 +39,14 @@ export async function uploadImage(file, meta) {
   return data;
 }
 
+// Milestone 11: backs ResultsPage's refresh-safe path -- a refresh or
+// direct/shared link to /results/:imageId has no router state, so it
+// refetches by ID instead.
+export async function getImage(id) {
+  const { data } = await client.get(`/api/images/${id}`);
+  return data;
+}
+
 export async function getRoads() {
   const { data } = await client.get("/api/roads");
   return data;
