@@ -69,4 +69,16 @@ export async function getRoadReportBlob(id) {
   return data;
 }
 
+// Retry queue: images saved as "pending analysis" when the AI service was
+// down at upload time (see POST /api/images/upload's 502 branch).
+export async function getPendingImages() {
+  const { data } = await client.get("/api/images/pending/list");
+  return data;
+}
+
+export async function retryImage(id) {
+  const { data } = await client.post(`/api/images/${id}/retry`);
+  return data;
+}
+
 export default client;

@@ -6,6 +6,7 @@ import UploadPage from "./pages/UploadPage";
 import ResultsPage from "./pages/ResultsPage";
 import DashboardPage from "./pages/DashboardPage";
 import RoadDetailPage from "./pages/RoadDetailPage";
+import PendingPage from "./pages/PendingPage";
 
 function Topbar() {
   const { user, logout } = useAuth();
@@ -26,6 +27,9 @@ function Topbar() {
           )}
           <Link to="/upload" style={{ color: "var(--text-muted)", textDecoration: "none" }}>
             New Inspection
+          </Link>
+          <Link to="/pending" style={{ color: "var(--text-muted)", textDecoration: "none" }}>
+            Pending
           </Link>
           <span className="mono">{user.name}</span>
           <button onClick={logout}>Log out</button>
@@ -58,6 +62,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <RoadDetailPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/pending"
+        element={
+          <ProtectedRoute>
+            <PendingPage />
           </ProtectedRoute>
         }
       />

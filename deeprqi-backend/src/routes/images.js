@@ -155,4 +155,98 @@ router.get("/:id", requireAuth, async (req, res) => {
   res.json(image);
 });
 
+// Retry queue: an image lands here (has an imagePath but no RqiScore) when
+// the AI service was down at upload time -- see the 502 branch above. This
+// path shape ("/pending/list", two segments) never collides with the
+// single-segment "/:id" route above regardless of declaration order.
+router.get("/pending/list", requireAuth, async (req, res) => {
+  const where = { scores: { none: {} } };
+  // INSPECTORs only see their own pending uploads; ADMIN sees everyone's.
+  if (req.user.role !== "ADMIN") {
+    where.uploadedById = req.user.id;
+  }
+  const pending = await prisma.roadImage.findMany({
+    where,
+    include: { road: true },
+    orderBy: { uploadedAt: "desc" },
+  });
+  res.json(pending);
+});
+
+// Re-run inference for a pending image. We never kept the original upload
+// bytes on this server past the initial request -- but they're durable now
+// (Milestone 11, Supabase Storage), so we just pull the persisted photo
+// back down and forward it to the AI service again, same as a fresh upload.
+router.post("/:id/retry", requireAuth, async (req, res) => {
+  const roadImage = await prisma.roadImage.findUnique({
+    where: { id: req.params.id },
+    include: { scores: true, road: true },
+  });
+  if (!roadImage) return res.status(404).json({ error: "Image not found." });
+  if (roadImage.scores.length > 0) {
+    return res.status(400).json({ error: "This image already has a result." });
+  }
+
+  let imageBuffer;
+  try {
+    const photoResp = await axios.get(roadImage.imagePath, { responseType: "arraybuffer" });
+    imageBuffer = Buffer.from(photoResp.data);
+  } catch (err) {
+    return res.status(502).json({ error: "Could not re-fetch the stored photo. Try again later." });
+  }
+
+  const form = new FormData();
+  form.append("file", imageBuffer, { filename: "retry.jpg", contentType: "image/jpeg" });
+
+  let aiResponse;
+  try {
+    aiResponse = await axios.post(
+      `${process.env.FASTAPI_URL}/predict`,
+      form,
+      { headers: form.getHeaders(), maxBodyLength: Infinity }
+    );
+  } catch (err) {
+    // Still down -- leave the image exactly as it was, so it stays in the
+    // pending list for another retry later.
+    return res.status(502).json({ error: "AI service still unavailable. Try again later." });
+  }
+
+  const { detections, rqi, heatmap_base64 } = aiResponse.data;
+
+  const heatmapUrl = await uploadBuffer(
+    Buffer.from(heatmap_base64, "base64"),
+    `roads/${roadImage.roadId}/${crypto.randomUUID()}-heatmap.png`,
+    "image/png"
+  );
+
+  const updated = await prisma.roadImage.update({
+    where: { id: roadImage.id },
+    data: {
+      heatmapPath: heatmapUrl,
+      detections: {
+        create: detections.map((d) => ({
+          damageType: d.damage_type,
+          confidence: d.confidence,
+          severity: d.severity,
+          bbox: d.bbox,
+        })),
+      },
+    },
+    include: { detections: true },
+  });
+
+  const rqiScore = await prisma.rqiScore.create({
+    data: {
+      roadId: roadImage.roadId,
+      imageId: roadImage.id,
+      score: rqi.score,
+      category: rqi.category,
+      totalPenalty: rqi.total_penalty,
+      breakdown: rqi.breakdown,
+    },
+  });
+
+  res.json({ road: roadImage.road, image: updated, rqi: rqiScore });
+});
+
 module.exports = router;
