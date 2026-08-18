@@ -5,8 +5,9 @@ const FormData = require("form-data");
 const crypto = require("crypto");
 const prisma = require("../lib/prisma");
 const { requireAuth } = require("../middleware/auth");
-const { setRoadLocation } = require("../lib/geo");
+const { setRoadLocation, findRoadsNear } = require("../lib/geo");
 const { uploadBuffer } = require("../lib/storage");
+const { generateExplanation } = require("../lib/xaiSummary");
 
 const router = express.Router();
 
@@ -19,19 +20,58 @@ const upload = multer({
 
 const EXT_BY_MIME = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
 
+// Bug fix: two inspections at the same physical spot were splitting into
+// separate Road rows (and separate history) whenever roadName was typed
+// with a different case, extra whitespace, or slightly different wording
+// between visits -- the old lookup matched on exact roadName+city string
+// equality only, never on location. 50m treats "same spot, retyped name"
+// as the same road while still keeping genuinely distinct nearby roads
+// (different street, different junction) apart.
+const ROAD_MATCH_RADIUS_KM = 0.05;
+
+// GET /models must be declared before GET /:id -- both are single path
+// segments, and Express would otherwise treat "models" as an :id value.
+router.get("/models", requireAuth, async (req, res) => {
+  try {
+    const { data } = await axios.get(`${process.env.FASTAPI_URL}/models`);
+    res.json(data);
+  } catch (err) {
+    res.status(502).json({ error: "Could not reach the AI service for the model list." });
+  }
+});
+
 router.post("/upload", requireAuth, upload.single("file"), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: "No image file provided (field name: 'file')." });
   }
 
-  const { roadName, city, district, state, lat, lng } = req.body;
+  const { roadName, city, district, state, lat, lng, model } = req.body;
   if (!roadName) {
     return res.status(400).json({ error: "roadName is required." });
   }
 
   try {
     // 1. Find or create the road this image belongs to.
-    let road = await prisma.road.findFirst({ where: { roadName, city: city || null } });
+    // Prefer matching by physical location -- if this upload's GPS falls
+    // within ROAD_MATCH_RADIUS_KM of an existing road, treat it as that
+    // same road regardless of how roadName was typed this time.
+    let road = null;
+    if (lat && lng) {
+      const nearby = await findRoadsNear(parseFloat(lat), parseFloat(lng), ROAD_MATCH_RADIUS_KM);
+      if (nearby.length > 0) {
+        road = await prisma.road.findUnique({ where: { id: nearby[0].id } });
+      }
+    }
+    // Fall back to a case/whitespace-insensitive name+city match (covers
+    // uploads with no GPS at all), then finally create a new road.
+    if (!road) {
+      road = await prisma.road.findFirst({
+        where: {
+          roadName: { equals: roadName.trim(), mode: "insensitive" },
+          city: city ? { equals: city.trim(), mode: "insensitive" } : null,
+        },
+      });
+    }
     if (!road) {
       road = await prisma.road.create({
         data: { roadName, city, district, state },
@@ -69,7 +109,10 @@ router.post("/upload", requireAuth, upload.single("file"), async (req, res) => {
     let aiResponse;
     try {
       aiResponse = await axios.post(
-        `${process.env.FASTAPI_URL}/predict`,
+        // model is optional -- omitted, the AI service falls back to its
+        // own DEFAULT_MODEL_NAME (see ai-service/app/config.py), so a
+        // single-model setup needs no frontend changes at all.
+        `${process.env.FASTAPI_URL}/predict${model ? `?model=${encodeURIComponent(model)}` : ""}`,
         form,
         { headers: form.getHeaders(), maxBodyLength: Infinity }
       );
@@ -81,6 +124,7 @@ router.post("/upload", requireAuth, upload.single("file"), async (req, res) => {
           roadId: road.id,
           uploadedById: req.user.id,
           imagePath: originalUrl,
+          modelUsed: model || null,
           lat: lat ? parseFloat(lat) : null,
           lng: lng ? parseFloat(lng) : null,
         },
@@ -108,6 +152,7 @@ router.post("/upload", requireAuth, upload.single("file"), async (req, res) => {
         uploadedById: req.user.id,
         imagePath: originalUrl,
         heatmapPath: heatmapUrl,
+        modelUsed: model || null,
         lat: lat ? parseFloat(lat) : null,
         lng: lng ? parseFloat(lng) : null,
         detections: {
@@ -138,7 +183,7 @@ router.post("/upload", requireAuth, upload.single("file"), async (req, res) => {
     res.status(201).json({
       road,
       image: roadImage,
-      rqi: rqiScore,
+      rqi: { ...rqiScore, explanation: generateExplanation(rqiScore) },
     });
   } catch (err) {
     console.error(err);
@@ -152,7 +197,10 @@ router.get("/:id", requireAuth, async (req, res) => {
     include: { detections: true, scores: true, road: true },
   });
   if (!image) return res.status(404).json({ error: "Image not found." });
-  res.json(image);
+  res.json({
+    ...image,
+    scores: image.scores.map((s) => ({ ...s, explanation: generateExplanation(s) })),
+  });
 });
 
 // Retry queue: an image lands here (has an imagePath but no RqiScore) when
@@ -187,6 +235,10 @@ router.post("/:id/retry", requireAuth, async (req, res) => {
     return res.status(400).json({ error: "This image already has a result." });
   }
 
+  // Optional: retry with a specific model instead of whatever was
+  // originally requested (or the AI service's default).
+  const { model } = req.body || {};
+
   let imageBuffer;
   try {
     const photoResp = await axios.get(roadImage.imagePath, { responseType: "arraybuffer" });
@@ -201,7 +253,7 @@ router.post("/:id/retry", requireAuth, async (req, res) => {
   let aiResponse;
   try {
     aiResponse = await axios.post(
-      `${process.env.FASTAPI_URL}/predict`,
+      `${process.env.FASTAPI_URL}/predict${model ? `?model=${encodeURIComponent(model)}` : ""}`,
       form,
       { headers: form.getHeaders(), maxBodyLength: Infinity }
     );
@@ -223,6 +275,7 @@ router.post("/:id/retry", requireAuth, async (req, res) => {
     where: { id: roadImage.id },
     data: {
       heatmapPath: heatmapUrl,
+      modelUsed: model || roadImage.modelUsed || null,
       detections: {
         create: detections.map((d) => ({
           damageType: d.damage_type,
@@ -246,7 +299,53 @@ router.post("/:id/retry", requireAuth, async (req, res) => {
     },
   });
 
-  res.json({ road: roadImage.road, image: updated, rqi: rqiScore });
+  res.json({ road: roadImage.road, image: updated, rqi: { ...rqiScore, explanation: generateExplanation(rqiScore) } });
+});
+
+// Multi-model comparison: run one already-uploaded photo through several
+// named models at once, without touching the DB -- this is a read-only
+// "what would model B have said" view, not a re-inspection. The persisted
+// RoadImage/RqiScore rows (and its history) are untouched either way.
+router.post("/:id/compare", requireAuth, async (req, res) => {
+  const { models } = req.body || {};
+  if (!Array.isArray(models) || models.length < 2) {
+    return res.status(400).json({ error: "Provide at least two model names in the 'models' array to compare." });
+  }
+
+  const roadImage = await prisma.roadImage.findUnique({ where: { id: req.params.id } });
+  if (!roadImage) return res.status(404).json({ error: "Image not found." });
+
+  let imageBuffer;
+  try {
+    const photoResp = await axios.get(roadImage.imagePath, { responseType: "arraybuffer" });
+    imageBuffer = Buffer.from(photoResp.data);
+  } catch (err) {
+    return res.status(502).json({ error: "Could not re-fetch the stored photo. Try again later." });
+  }
+
+  const results = await Promise.all(
+    models.map(async (name) => {
+      try {
+        const form = new FormData();
+        form.append("file", imageBuffer, { filename: "compare.jpg", contentType: "image/jpeg" });
+        const resp = await axios.post(
+          `${process.env.FASTAPI_URL}/predict?model=${encodeURIComponent(name)}`,
+          form,
+          { headers: form.getHeaders(), maxBodyLength: Infinity }
+        );
+        return {
+          model: name,
+          detections: resp.data.detections,
+          rqi: { ...resp.data.rqi, explanation: generateExplanation(resp.data.rqi) },
+          heatmap_base64: resp.data.heatmap_base64,
+        };
+      } catch (err) {
+        return { model: name, error: err.response?.data?.detail || "Prediction failed for this model." };
+      }
+    })
+  );
+
+  res.json({ image: roadImage, results });
 });
 
 module.exports = router;

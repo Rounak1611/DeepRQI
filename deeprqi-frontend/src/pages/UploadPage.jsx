@@ -1,6 +1,6 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { uploadImage } from "../api/client";
+import { uploadImage, getAvailableModels } from "../api/client";
 
 export default function UploadPage() {
   const [file, setFile] = useState(null);
@@ -12,9 +12,29 @@ export default function UploadPage() {
   const [dragActive, setDragActive] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [availableModels, setAvailableModels] = useState([]);
+  const [model, setModel] = useState("");
 
   const fileInputRef = useRef(null);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    // Only worth showing a picker once there's more than one model to pick
+    // between -- with a single model configured (the common case today)
+    // this silently does nothing and the form looks exactly as before.
+    (async () => {
+      try {
+        const data = await getAvailableModels();
+        if (data.models?.length > 1) {
+          setAvailableModels(data.models);
+          setModel(data.default);
+        }
+      } catch (err) {
+        // AI service unreachable at page-load time isn't fatal here --
+        // upload will surface its own error if it's still down when submitted.
+      }
+    })();
+  }, []);
 
   const handleFile = (f) => {
     if (!f || !f.type.startsWith("image/")) {
@@ -54,7 +74,7 @@ export default function UploadPage() {
     setLoading(true);
     setError("");
     try {
-      const result = await uploadImage(file, { roadName, city, lat, lng });
+      const result = await uploadImage(file, { roadName, city, lat, lng, model });
       navigate(`/results/${result.image.id}`, { state: { result, previewUrl } });
     } catch (err) {
       setError(err.response?.data?.error || "Upload failed. Check the AI service is running.");
@@ -164,6 +184,20 @@ export default function UploadPage() {
           >
             Use my current location
           </button>
+
+          {availableModels.length > 1 && (
+            <div className="field" style={{ marginBottom: "20px" }}>
+              <label htmlFor="model">Model</label>
+              <select id="model" value={model} onChange={(e) => setModel(e.target.value)}>
+                {availableModels.map((m) => (
+                  <option key={m.name} value={m.name}>
+                    {m.name}
+                    {m.is_placeholder_model ? " (placeholder, untrained)" : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <button type="submit" className="btn-primary" disabled={loading}>
             {loading ? "Analyzing…" : "Run inspection"}

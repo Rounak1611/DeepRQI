@@ -3,6 +3,7 @@ const prisma = require("../lib/prisma");
 const { findRoadsNear } = require("../lib/geo");
 const { writeRoadReportPdf } = require("../lib/pdfReport");
 const { requireAuth } = require("../middleware/auth");
+const { predictDegradation } = require("../lib/degradation");
 
 const router = express.Router();
 
@@ -68,7 +69,15 @@ router.get("/:id", requireAuth, async (req, res) => {
 	});
 
 	if (!road) return res.status(404).json({ error: "Road not found." });
-	res.json(road);
+
+	// Repair-deadline projection (see lib/degradation.js) -- computed from
+	// every score this road has, oldest to newest.
+	const scoreHistory = road.images
+		.flatMap((img) => img.scores)
+		.map((s) => ({ score: s.score, generatedAt: s.generatedAt }));
+	const degradationForecast = predictDegradation(scoreHistory);
+
+	res.json({ ...road, degradationForecast });
 });
 
 // GET /api/roads/:id/report -- PDF inspection report (Milestone 9). Same

@@ -7,6 +7,8 @@ import ResultsPage from "./pages/ResultsPage";
 import DashboardPage from "./pages/DashboardPage";
 import RoadDetailPage from "./pages/RoadDetailPage";
 import PendingPage from "./pages/PendingPage";
+import ModelComparePage from "./pages/ModelComparePage";
+import ChatWidget from "./components/ChatWidget";
 
 function Topbar() {
   const { user, logout } = useAuth();
@@ -37,6 +39,12 @@ function Topbar() {
       )}
     </div>
   );
+}
+
+function AuthedChatWidget() {
+  const { user } = useAuth();
+  if (!user) return null;
+  return <ChatWidget />;
 }
 
 function AppRoutes() {
@@ -89,6 +97,14 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/compare/:imageId"
+        element={
+          <ProtectedRoute>
+            <ModelComparePage />
+          </ProtectedRoute>
+        }
+      />
       <Route path="*" element={<Navigate to={homePath} />} />
     </Routes>
   );
@@ -101,6 +117,7 @@ export default function App() {
         <div className="app-shell">
           <Topbar />
           <AppRoutes />
+          <AuthedChatWidget />
         </div>
       </AuthProvider>
     </BrowserRouter>

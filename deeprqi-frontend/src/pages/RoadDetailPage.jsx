@@ -4,6 +4,7 @@ import { getRoad, getRoadReportBlob } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import RqiGauge from "../components/RqiGauge";
 import RqiTrendChart from "../components/RqiTrendChart";
+import DegradationForecastPanel from "../components/DegradationForecastPanel";
 import { bandForScore } from "../utils/rqiBands";
 
 export default function RoadDetailPage() {
@@ -161,6 +162,8 @@ export default function RoadDetailPage() {
           )}
         </div>
       </div>
+
+      <DegradationForecastPanel forecast={road.degradationForecast} />
 
       <div className="panel">
         <h3 style={{ fontSize: "13px", color: "var(--text-muted)", marginBottom: "14px" }}>

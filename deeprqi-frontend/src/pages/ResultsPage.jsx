@@ -91,6 +91,20 @@ export default function ResultsPage() {
           >
             View history & report
           </Link>
+          <Link
+            to={`/compare/${image.id}`}
+            style={{
+              background: "none",
+              border: "1px solid var(--line)",
+              color: "var(--text-muted)",
+              padding: "8px 16px",
+              borderRadius: "3px",
+              fontSize: "13px",
+              textDecoration: "none",
+            }}
+          >
+            Compare models
+          </Link>
           <button
             onClick={() => navigate("/upload")}
             style={{
@@ -125,6 +139,12 @@ export default function ResultsPage() {
           <div style={{ width: "100%", marginTop: "18px", borderTop: "1px solid var(--line)", paddingTop: "16px" }}>
             <DetectionList breakdown={rqi.breakdown} />
           </div>
+          {rqi.explanation && (
+            <div style={{ width: "100%", marginTop: "16px", borderTop: "1px solid var(--line)", paddingTop: "16px" }}>
+              <h4 style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "6px" }}>Why this score</h4>
+              <p style={{ fontSize: "13px", lineHeight: "1.5" }}>{rqi.explanation}</p>
+            </div>
+          )}
         </div>
       </div>
 

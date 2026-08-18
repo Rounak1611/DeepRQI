@@ -7,7 +7,7 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from ultralytics import YOLO
 
-from .config import CLASS_NAMES, MODEL_PATH
+from .config import CLASS_NAMES, MODEL_REGISTRY, DEFAULT_MODEL_NAME
 from .explainability import EigenCAM, get_target_layer
 from .rqi_engine import compute_rqi
 from .schemas import PredictResponse
@@ -27,37 +27,77 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-logger.info(f"Loading model from: {MODEL_PATH}")
-model = YOLO(MODEL_PATH)
-cam = EigenCAM(model, get_target_layer(model))
+# Load every registered model up front (see config.py -- MODEL_REGISTRY
+# always has at least DEFAULT_MODEL_NAME). Eager loading keeps /predict
+# latency flat regardless of which model is requested, at the cost of
+# holding every model in memory for the life of the process -- fine for the
+# handful of model variants this project compares, not meant to scale to
+# dozens.
+logger.info(f"Loading {len(MODEL_REGISTRY)} model(s): {list(MODEL_REGISTRY.keys())}")
+_loaded_models = {}
+for _name, _path in MODEL_REGISTRY.items():
+    logger.info(f"  loading '{_name}' from {_path}")
+    _m = YOLO(_path)
+    _is_placeholder = _m.model.nc != len(CLASS_NAMES)
+    if _is_placeholder:
+        logger.warning(
+            "Model '%s' (%s) has %s classes, not DeepRQI's %s trained classes -- looks like a "
+            "placeholder/COCO checkpoint. Predictions will run but damage_type labels will be "
+            "meaningless until it's pointed at real trained weights.",
+            _name, _path, _m.model.nc, len(CLASS_NAMES),
+        )
+    _loaded_models[_name] = {
+        "model": _m,
+        "cam": EigenCAM(_m, get_target_layer(_m)),
+        "path": _path,
+        "is_placeholder": _is_placeholder,
+    }
 
-# If MODEL_PATH is still the stock COCO checkpoint (not yet fine-tuned on
-# RDD2022), class indices won't match CLASS_NAMES. Warn loudly rather than
-# silently mislabeling detections.
-_is_placeholder_model = model.model.nc != len(CLASS_NAMES)
-if _is_placeholder_model:
-    logger.warning(
-        "Loaded model's class count (%s) doesn't match DeepRQI's %s trained "
-        "classes -- this looks like a placeholder/COCO checkpoint, not your "
-        "fine-tuned RDD2022 model. Predictions will run but damage_type "
-        "labels will be meaningless until you point MODEL_PATH at your real "
-        "trained weights.",
-        model.model.nc, len(CLASS_NAMES),
-    )
+
+def _get_model_entry(name: str):
+    entry = _loaded_models.get(name)
+    if entry is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown model '{name}'. Available: {list(_loaded_models.keys())}",
+        )
+    return entry
+
+
+@app.get("/models")
+def list_models():
+    return {
+        "default": DEFAULT_MODEL_NAME,
+        "models": [
+            {
+                "name": name,
+                "path": entry["path"],
+                "is_placeholder_model": entry["is_placeholder"],
+                "num_classes_loaded": entry["model"].model.nc,
+            }
+            for name, entry in _loaded_models.items()
+        ],
+    }
 
 
 @app.get("/health")
 def health():
+    default_entry = _loaded_models[DEFAULT_MODEL_NAME]
     return {
         "status": "ok",
-        "model_path": MODEL_PATH,
-        "is_placeholder_model": _is_placeholder_model,
-        "num_classes_loaded": model.model.nc,
+        "model_path": default_entry["path"],
+        "is_placeholder_model": default_entry["is_placeholder"],
+        "num_classes_loaded": default_entry["model"].model.nc,
+        "available_models": list(_loaded_models.keys()),
     }
 
 
 @app.post("/predict", response_model=PredictResponse)
-async def predict(file: UploadFile = File(...)):
+async def predict(file: UploadFile = File(...), model: str = DEFAULT_MODEL_NAME):
+    entry = _get_model_entry(model)
+    yolo_model = entry["model"]
+    cam = entry["cam"]
+
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Uploaded file must be an image.")
 
@@ -69,7 +109,7 @@ async def predict(file: UploadFile = File(...)):
 
     img_h, img_w = img.shape[:2]
 
-    results = model.predict(img, verbose=False)[0]
+    results = yolo_model.predict(img, verbose=False)[0]
 
     detections = []
     for box in results.boxes:

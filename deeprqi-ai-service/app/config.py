@@ -1,15 +1,30 @@
+import json
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# ---- Model ----
-# Point this at your trained checkpoint once GPU training is done, e.g.:
-#   MODEL_PATH=/path/to/DeepRQI/runs/yolo26s_rdd2022/weights/best.pt
-# Until then, it defaults to the stock COCO-pretrained checkpoint just so the
-# pipeline runs end-to-end (predictions won't be meaningful road-damage classes
-# yet, but every other piece of the service can be built/tested against it).
+# ---- Model registry ----
+# MODEL_PATH remains the single env var for the *default* model -- existing
+# single-model setups (Milestones 1-11) are unaffected. Additional named
+# models can be added via MODEL_REGISTRY_JSON, a JSON object mapping a short
+# name to a checkpoint path, e.g. once more than one model is trained:
+#   MODEL_REGISTRY_JSON={"yolo26s_v1": "runs/yolo26s_rdd2022/weights/best.pt", "yolo26m_v1": "runs/yolo26m_rdd2022/weights/best.pt"}
+# Every registered model is loaded at startup so /predict?model=<name> can
+# switch between them per-request, and POST /api/images/:id/compare (Node
+# backend) can run the same photo through several at once.
 MODEL_PATH = os.getenv("MODEL_PATH", "yolo26s.pt")
+DEFAULT_MODEL_NAME = os.getenv("DEFAULT_MODEL_NAME", "default")
+
+_registry_json = os.getenv("MODEL_REGISTRY_JSON", "")
+try:
+    MODEL_REGISTRY = json.loads(_registry_json) if _registry_json else {}
+except json.JSONDecodeError:
+    MODEL_REGISTRY = {}
+# Always include the default model, so there's always at least one valid
+# `model` name even with zero extra models configured -- this is what keeps
+# a fresh, single-model setup working with no config changes at all.
+MODEL_REGISTRY.setdefault(DEFAULT_MODEL_NAME, MODEL_PATH)
 
 # ---- Class names, in the exact index order used during training ----
 CLASS_NAMES = [

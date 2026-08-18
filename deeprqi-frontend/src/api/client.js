@@ -32,10 +32,27 @@ export async function uploadImage(file, meta) {
   if (meta.state) form.append("state", meta.state);
   if (meta.lat) form.append("lat", meta.lat);
   if (meta.lng) form.append("lng", meta.lng);
+  if (meta.model) form.append("model", meta.model);
 
   const { data } = await client.post("/api/images/upload", form, {
     headers: { "Content-Type": "multipart/form-data" },
   });
+  return data;
+}
+
+// Multi-model support: which named models the AI service currently has
+// loaded (see ai-service/app/config.py MODEL_REGISTRY). With only one
+// model configured this returns a single entry -- callers should treat a
+// 1-model response as "nothing to choose," not an error.
+export async function getAvailableModels() {
+  const { data } = await client.get("/api/images/models");
+  return data;
+}
+
+// Runs one already-uploaded photo through several named models at once
+// (read-only -- doesn't touch the image's persisted result).
+export async function compareModels(imageId, models) {
+  const { data } = await client.post(`/api/images/${imageId}/compare`, { models });
   return data;
 }
 
@@ -78,6 +95,12 @@ export async function getPendingImages() {
 
 export async function retryImage(id) {
   const { data } = await client.post(`/api/images/${id}/retry`);
+  return data;
+}
+
+// Chatbot: rule-based assistant, see backend/src/lib/chatbot.js.
+export async function sendChatMessage(message) {
+  const { data } = await client.post("/api/chat", { message });
   return data;
 }
 
