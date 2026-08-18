@@ -99,7 +99,7 @@ router.get("/:id/report", requireAuth, async (req, res) => {
 	const safeName = road.roadName.replace(/[^a-z0-9]/gi, "_");
 	res.setHeader("Content-Type", "application/pdf");
 	res.setHeader("Content-Disposition", `attachment; filename="${safeName}_report.pdf"`);
-	writeRoadReportPdf(road, res);
+	await writeRoadReportPdf(road, res);
 });
 
 module.exports = router;
