@@ -16,17 +16,17 @@ export default function DegradationForecastPanel({ forecast }) {
         Repair-deadline forecast
       </h3>
 
-      {!forecast.predictable && (
-        <p style={{ color: "var(--text-muted)", fontSize: "14px" }}>{forecast.reason}</p>
-      )}
-
-      {forecast.predictable && forecast.alreadyCritical && (
+      {forecast.alreadyCritical && (
         <p style={{ color: "var(--critical, #c0392b)", fontSize: "14px", fontWeight: 500 }}>
           This road is already in Critical condition -- repair is overdue, not just projected.
         </p>
       )}
 
-      {forecast.predictable && !forecast.alreadyCritical && (
+      {!forecast.alreadyCritical && !forecast.predictable && (
+        <p style={{ color: "var(--text-muted)", fontSize: "14px" }}>{forecast.reason}</p>
+      )}
+
+      {!forecast.alreadyCritical && forecast.predictable && (
         <div>
           <p style={{ fontSize: "14px", marginBottom: "8px" }}>
             Declining at roughly{" "}

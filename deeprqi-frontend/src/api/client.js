@@ -74,6 +74,15 @@ export async function getDashboardStats() {
   return data;
 }
 
+// Repair-priority ranking: every road with >=1 inspection, ranked by
+// urgency (see backend/src/lib/priority.js), with a rough repair-cost
+// estimate alongside each one (backend/src/lib/repairCost.js). ADMIN-only,
+// same as dashboard stats.
+export async function getRepairPriorityList() {
+  const { data } = await client.get("/api/dashboard/priority");
+  return data;
+}
+
 export async function getRoad(id) {
   const { data } = await client.get(`/api/roads/${id}`);
   return data;

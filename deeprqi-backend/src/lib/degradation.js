@@ -25,10 +25,23 @@ function predictDegradation(scoreHistory) {
     .map((s) => ({ score: s.score, generatedAt: new Date(s.generatedAt) }))
     .sort((a, b) => a.generatedAt - b.generatedAt);
 
+  if (points.length === 0) {
+    return { predictable: false, reason: "No inspections recorded yet." };
+  }
+
+  // "Already critical" is a snapshot fact about the latest score, not a
+  // forecast -- compute it once, up front, so it's available even when
+  // there isn't enough history yet to fit a trend line (points.length < 2
+  // used to skip this entirely, silently under-flagging a road that was
+  // already bad on its very first inspection).
+  const latestScore = points[points.length - 1].score;
+  const alreadyCritical = latestScore < CRITICAL_THRESHOLD;
+
   if (points.length < 2) {
     return {
       predictable: false,
       reason: "Needs at least two inspections to establish a trend.",
+      alreadyCritical,
     };
   }
 
@@ -48,6 +61,7 @@ function predictDegradation(scoreHistory) {
     return {
       predictable: false,
       reason: "Not enough spread in inspection dates to fit a trend.",
+      alreadyCritical,
     };
   }
 
@@ -60,13 +74,12 @@ function predictDegradation(scoreHistory) {
       predictable: false,
       reason: "RQI is stable or improving over the recorded history -- no decline to project forward.",
       trendPointsPerMonth: Math.round(slope * 30 * 100) / 100,
+      alreadyCritical,
     };
   }
 
   const daysToScore = (targetScore) => (targetScore - intercept) / slope;
-  const latestScore = points[points.length - 1].score;
   const latestDays = xs[xs.length - 1];
-  const alreadyCritical = latestScore < CRITICAL_THRESHOLD;
 
   const daysToCritical = daysToScore(CRITICAL_THRESHOLD);
   const daysToPoorWarning = daysToScore(POOR_THRESHOLD);

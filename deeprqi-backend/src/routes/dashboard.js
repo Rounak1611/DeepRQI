@@ -1,6 +1,7 @@
 const express = require("express");
 const prisma = require("../lib/prisma");
 const { requireAuth, requireRole } = require("../middleware/auth");
+const { rankRoadsByPriority } = require("../lib/rankRoadsByPriority");
 
 const router = express.Router();
 
@@ -28,6 +29,21 @@ router.get("/stats", requireAuth, requireRole("ADMIN"), async (req, res) => {
 		avgScore: avgScore !== null ? Math.round(avgScore * 10) / 10 : null,
 		criticalCount,
 	});
+});
+
+// GET /api/dashboard/priority -- ADMIN-only. Ranks every road that has at
+// least one inspection by lib/priority.js's urgency score (current RQI +
+// how soon the degradation forecast says it'll cross into Critical), with
+// a rough repair-cost estimate (lib/repairCost.js) alongside each one.
+// This is the "what should we fix first" view -- Phase-3 "Decision Engine
+// / maintenance priority scoring" from the project roadmap. Both scoring
+// functions are heuristics, clearly labeled as estimates on the frontend,
+// not a real budgeting or scheduling tool.
+router.get("/priority", requireAuth, requireRole("ADMIN"), async (req, res) => {
+	const roads = await prisma.road.findMany({
+		include: { images: { include: { scores: true } } },
+	});
+	res.json({ roads: rankRoadsByPriority(roads) });
 });
 
 module.exports = router;

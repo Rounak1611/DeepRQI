@@ -8,6 +8,7 @@ import DashboardPage from "./pages/DashboardPage";
 import RoadDetailPage from "./pages/RoadDetailPage";
 import PendingPage from "./pages/PendingPage";
 import ModelComparePage from "./pages/ModelComparePage";
+import RepairPriorityPage from "./pages/RepairPriorityPage";
 import ChatWidget from "./components/ChatWidget";
 
 function Topbar() {
@@ -25,6 +26,11 @@ function Topbar() {
           {user.role === "ADMIN" && (
             <Link to="/dashboard" style={{ color: "var(--text-muted)", textDecoration: "none" }}>
               Dashboard
+            </Link>
+          )}
+          {user.role === "ADMIN" && (
+            <Link to="/priority" style={{ color: "var(--text-muted)", textDecoration: "none" }}>
+              Repair priority
             </Link>
           )}
           <Link to="/upload" style={{ color: "var(--text-muted)", textDecoration: "none" }}>
@@ -62,6 +68,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute roles={["ADMIN"]}>
             <DashboardPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/priority"
+        element={
+          <ProtectedRoute roles={["ADMIN"]}>
+            <RepairPriorityPage />
           </ProtectedRoute>
         }
       />

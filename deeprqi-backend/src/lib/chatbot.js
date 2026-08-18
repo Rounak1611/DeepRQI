@@ -126,12 +126,12 @@ async function handleRoadQuestion(fragment) {
   const forecast = predictDegradation(scored.map((s) => ({ score: s.score, generatedAt: s.generatedAt })));
 
   let forecastNote = "";
-  if (forecast.predictable && forecast.recommendedRepairByDate) {
+  if (forecast.alreadyCritical) {
+    forecastNote = " This road is already in Critical condition -- repair is overdue.";
+  } else if (forecast.predictable && forecast.recommendedRepairByDate) {
     forecastNote = ` At the current trend, recommended repair-by date is ${new Date(
       forecast.recommendedRepairByDate
     ).toLocaleDateString()}.`;
-  } else if (forecast.predictable && forecast.alreadyCritical) {
-    forecastNote = " This road is already in Critical condition -- repair is overdue.";
   }
 
   return `${road.roadName} is currently ${latestScore.category} (${Math.round(latestScore.score)}/100). ${explanation}${forecastNote}`;
