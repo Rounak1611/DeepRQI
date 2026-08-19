@@ -1,3 +1,5 @@
+import InfoTooltip from "./InfoTooltip";
+
 const SEVERITY_COLOR = {
   low: "var(--fair)",
   medium: "var(--poor)",
@@ -19,7 +21,10 @@ export default function DetectionList({ breakdown }) {
       <thead>
         <tr style={{ borderBottom: "1px solid var(--line)", textAlign: "left" }}>
           <th style={{ padding: "8px 4px", color: "var(--text-muted)", fontWeight: 500 }}>Type</th>
-          <th style={{ padding: "8px 4px", color: "var(--text-muted)", fontWeight: 500 }}>Severity</th>
+          <th style={{ padding: "8px 4px", color: "var(--text-muted)", fontWeight: 500 }}>
+            Severity
+            <InfoTooltip text="Based on how much of the photo the damage's bounding box covers — not its real-world size. A close-up photo of a small crack can register as high severity." />
+          </th>
           <th style={{ padding: "8px 4px", color: "var(--text-muted)", fontWeight: 500, textAlign: "right" }}>
             Penalty
           </th>

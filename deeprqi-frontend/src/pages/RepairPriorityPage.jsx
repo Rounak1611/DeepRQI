@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getRepairPriorityList } from "../api/client";
 import { bandForScore } from "../utils/rqiBands";
+import InfoTooltip from "../components/InfoTooltip";
 
 function formatINR(amount) {
   return `₹${amount.toLocaleString("en-IN")}`;
@@ -49,9 +50,12 @@ export default function RepairPriorityPage() {
     <div className="main">
       <h2 style={{ fontSize: "22px", marginBottom: "6px" }}>Repair priority</h2>
       <p style={{ color: "var(--text-muted)", marginBottom: "20px", fontSize: "14px" }}>
-        Every road ranked by urgency -- current RQI plus how soon the repair-deadline forecast says it'll
-        reach Critical. Cost figures are rough, illustrative estimates for prioritization discussions, not
-        real quotes.
+        Every road ranked by urgency
+        <InfoTooltip text="Ranking combines current RQI with how soon the repair-deadline forecast says it'll reach Critical condition. It's a relative ordering, not a calibrated 0-100 scale — only meaningful compared to other roads on this list." />
+        {" "}-- current RQI plus how soon the repair-deadline forecast says it'll reach Critical.
+        Cost figures
+        <InfoTooltip text="Flat per-detection placeholder figures, not derived from any real costing or vendor data. These weights also haven't been calibrated against real inspector ratings or PCI standards — treat both as a starting point for prioritization discussions, not a quote." />
+        {" "}are rough, illustrative estimates for prioritization discussions, not real quotes.
       </p>
 
       {error && <div className="error-banner">{error}</div>}

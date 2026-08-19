@@ -5,6 +5,7 @@ import RqiGauge from "../components/RqiGauge";
 import BoundingBoxOverlay from "../components/BoundingBoxOverlay";
 import DetectionList from "../components/DetectionList";
 import OcclusionExplainer from "../components/OcclusionExplainer";
+import InfoTooltip from "../components/InfoTooltip";
 
 export default function ResultsPage() {
   const { imageId } = useParams();
@@ -133,8 +134,9 @@ export default function ResultsPage() {
 
         {/* Right: RQI gauge + breakdown */}
         <div className="panel" style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-          <h3 style={{ fontSize: "13px", color: "var(--text-muted)", marginBottom: "6px", alignSelf: "flex-start" }}>
+          <h3 style={{ fontSize: "13px", color: "var(--text-muted)", marginBottom: "6px", alignSelf: "flex-start", display: "flex", alignItems: "center" }}>
             Road Quality Index
+            <InfoTooltip text="Starts at 100 and subtracts a penalty for each detected defect. The penalty depends on damage type and severity (how much of the photo it covers) — see the breakdown below for exactly how this score was reached." />
           </h3>
           <RqiGauge score={rqi.score} category={rqi.category} />
           <div style={{ width: "100%", marginTop: "18px", borderTop: "1px solid var(--line)", paddingTop: "16px" }}>
@@ -142,7 +144,10 @@ export default function ResultsPage() {
           </div>
           {rqi.explanation && (
             <div style={{ width: "100%", marginTop: "16px", borderTop: "1px solid var(--line)", paddingTop: "16px" }}>
-              <h4 style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "6px" }}>Why this score</h4>
+              <h4 style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "6px", display: "flex", alignItems: "center" }}>
+                Why this score
+                <InfoTooltip text="Generated automatically from the breakdown above — a template, not a separate AI judgment. Every sentence here traces directly to a number in the table." />
+              </h4>
               <p style={{ fontSize: "13px", lineHeight: "1.5" }}>{rqi.explanation}</p>
             </div>
           )}
@@ -154,13 +159,26 @@ export default function ResultsPage() {
           string, so it survives refresh/refetch the same as the photo. */}
       {image.heatmapPath && (
         <div className="panel" style={{ marginTop: "20px" }}>
-          <h3 style={{ fontSize: "13px", color: "var(--text-muted)", marginBottom: "14px" }}>
+          <h3 style={{ fontSize: "13px", color: "var(--text-muted)", marginBottom: "10px", display: "flex", alignItems: "center" }}>
             Model attention (EigenCAM)
+            <InfoTooltip text="EigenCAM looks at the model's internal activations — the same computation used for the prediction itself — and shows which pixels most influenced it, without needing a specific class to explain." />
           </h3>
-          <p style={{ color: "var(--text-muted)", fontSize: "12px", marginBottom: "14px" }}>
-            Highlights which regions of the image most influenced the model's predictions —
-            an approximation of the model's reasoning, not proof the highlighted damage is correct.
+          <p style={{ color: "var(--text-muted)", fontSize: "12px", lineHeight: "1.5", marginBottom: "10px" }}>
+            This is <strong>not a second detection pass</strong> — it's a visualization of the same model run
+            that already produced the boxes above. It shows <em>where the model was looking overall</em> across
+            the whole photo, not specifically "why it called this a pothole." Treat it as a sanity check
+            (does the hot area line up with visible damage?), not proof the detections are correct.
           </p>
+          <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: "14px", fontSize: "11px", color: "var(--text-muted)" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+              <span style={{ width: "10px", height: "10px", borderRadius: "2px", background: "#e5484d", display: "inline-block" }} />
+              High attention (red/warm)
+            </span>
+            <span style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+              <span style={{ width: "10px", height: "10px", borderRadius: "2px", background: "#4a6fe5", display: "inline-block" }} />
+              Low attention (blue/cool)
+            </span>
+          </div>
           <img
             src={image.heatmapPath}
             alt="EigenCAM heatmap"

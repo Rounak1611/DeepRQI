@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { uploadImage, getAvailableModels } from "../api/client";
+import InfoTooltip from "../components/InfoTooltip";
 
 export default function UploadPage() {
   const [file, setFile] = useState(null);
@@ -187,7 +188,10 @@ export default function UploadPage() {
 
           {availableModels.length > 1 && (
             <div className="field" style={{ marginBottom: "20px" }}>
-              <label htmlFor="model">Model</label>
+              <label htmlFor="model">
+                Model
+                <InfoTooltip text="Which trained AI model runs the analysis. Different models can give different results for the same photo — use Compare models on a result to see them side by side." />
+              </label>
               <select id="model" value={model} onChange={(e) => setModel(e.target.value)}>
                 {availableModels.map((m) => (
                   <option key={m.name} value={m.name}>

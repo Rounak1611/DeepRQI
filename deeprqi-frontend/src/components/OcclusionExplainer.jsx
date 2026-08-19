@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { getOcclusionMap } from "../api/client";
+import InfoTooltip from "./InfoTooltip";
 
 // Second, independent XAI method -- see ai-service/app/occlusion.py for the
 // black-box occlusion-sensitivity algorithm. Deliberately on-demand rather
@@ -32,8 +33,9 @@ export default function OcclusionExplainer({ imageId, detections }) {
 
   return (
     <div className="panel" style={{ marginTop: "20px" }}>
-      <h3 style={{ fontSize: "13px", color: "var(--text-muted)", marginBottom: "8px" }}>
+      <h3 style={{ fontSize: "13px", color: "var(--text-muted)", marginBottom: "8px", display: "flex", alignItems: "center" }}>
         Independent check: occlusion sensitivity
+        <InfoTooltip text="Unlike the heatmap above (which reads the model's internal activations), this never looks inside the model — it blanks out one image region at a time and measures how much a specific detection's confidence drops. Two independently-derived explanations agreeing is stronger evidence than either alone." />
       </h3>
       <p style={{ color: "var(--text-muted)", fontSize: "12px", marginBottom: "14px" }}>
         A second, unrelated method for explaining a single detection -- instead of reading the model's

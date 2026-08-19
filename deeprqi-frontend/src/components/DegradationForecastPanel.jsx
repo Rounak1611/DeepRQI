@@ -1,3 +1,5 @@
+import InfoTooltip from "./InfoTooltip";
+
 // Renders the roads.js `degradationForecast` field (see
 // backend/src/lib/degradation.js). A simple linear-trend projection, not a
 // validated predictive model -- framed here as an estimate, not a promise.
@@ -12,8 +14,9 @@ export default function DegradationForecastPanel({ forecast }) {
 
   return (
     <div className="panel" style={{ marginBottom: "20px" }}>
-      <h3 style={{ fontSize: "13px", color: "var(--text-muted)", marginBottom: "10px" }}>
+      <h3 style={{ fontSize: "13px", color: "var(--text-muted)", marginBottom: "10px", display: "flex", alignItems: "center" }}>
         Repair-deadline forecast
+        <InfoTooltip text="A straight-line fit through this road's past RQI scores, extended forward to when it's projected to cross into Very Poor or Critical. Needs at least 2 inspections with a genuine downward trend — it has no knowledge of traffic, climate, or prior repairs." />
       </h3>
 
       {forecast.alreadyCritical && (
