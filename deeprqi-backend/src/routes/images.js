@@ -348,4 +348,44 @@ router.post("/:id/compare", requireAuth, async (req, res) => {
   res.json({ image: roadImage, results });
 });
 
+// Second XAI method: black-box occlusion sensitivity (see ai-service
+// app/occlusion.py) for ONE specific detection, identified by its bbox --
+// independent of EigenCAM's activation-based heatmap already returned by
+// upload/retry. On-demand only (not run automatically) since it costs
+// grid_size^2 model forward passes per call.
+router.post("/:id/occlusion", requireAuth, async (req, res) => {
+  const { bbox, model, gridSize } = req.body || {};
+  if (!Array.isArray(bbox) || bbox.length !== 4) {
+    return res.status(400).json({ error: "bbox is required: [x1, y1, x2, y2]." });
+  }
+
+  const roadImage = await prisma.roadImage.findUnique({ where: { id: req.params.id } });
+  if (!roadImage) return res.status(404).json({ error: "Image not found." });
+
+  let imageBuffer;
+  try {
+    const photoResp = await axios.get(roadImage.imagePath, { responseType: "arraybuffer" });
+    imageBuffer = Buffer.from(photoResp.data);
+  } catch (err) {
+    return res.status(502).json({ error: "Could not re-fetch the stored photo. Try again later." });
+  }
+
+  const form = new FormData();
+  form.append("file", imageBuffer, { filename: "occlusion.jpg", contentType: "image/jpeg" });
+  form.append("bbox", JSON.stringify(bbox));
+  if (model) form.append("model", model);
+  if (gridSize) form.append("grid_size", String(gridSize));
+
+  try {
+    const resp = await axios.post(
+      `${process.env.FASTAPI_URL}/predict/occlusion`,
+      form,
+      { headers: form.getHeaders(), maxBodyLength: Infinity }
+    );
+    res.json(resp.data);
+  } catch (err) {
+    res.status(502).json({ error: err.response?.data?.detail || "Occlusion analysis failed." });
+  }
+});
+
 module.exports = router;

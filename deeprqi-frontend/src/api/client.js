@@ -56,6 +56,14 @@ export async function compareModels(imageId, models) {
   return data;
 }
 
+// Second XAI method (see backend/src/routes/images.js + ai-service
+// app/occlusion.py): black-box occlusion sensitivity for one specific
+// detection, identified by its bbox. On-demand -- not run automatically.
+export async function getOcclusionMap(imageId, bbox, gridSize) {
+  const { data } = await client.post(`/api/images/${imageId}/occlusion`, { bbox, gridSize });
+  return data;
+}
+
 // Milestone 11: backs ResultsPage's refresh-safe path -- a refresh or
 // direct/shared link to /results/:imageId has no router state, so it
 // refetches by ID instead.

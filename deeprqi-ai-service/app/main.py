@@ -1,14 +1,16 @@
 import base64
+import json
 import logging
 
 import cv2
 import numpy as np
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from ultralytics import YOLO
 
 from .config import CLASS_NAMES, MODEL_REGISTRY, DEFAULT_MODEL_NAME
 from .explainability import EigenCAM, get_target_layer
+from .occlusion import compute_occlusion_map, occlusion_map_to_overlay
 from .rqi_engine import compute_rqi
 from .schemas import PredictResponse
 from .severity import compute_severity
@@ -141,4 +143,56 @@ async def predict(file: UploadFile = File(...), model: str = DEFAULT_MODEL_NAME)
         "heatmap_base64": heatmap_b64,
         "image_width": img_w,
         "image_height": img_h,
+    }
+
+
+@app.post("/predict/occlusion")
+async def predict_occlusion(
+    file: UploadFile = File(...),
+    bbox: str = Form(...),
+    model: str = Form(DEFAULT_MODEL_NAME),
+    grid_size: int = Form(6),
+):
+    """
+    Second XAI method (see occlusion.py) -- explains ONE specific detection
+    (identified by its bbox, as already returned by /predict) via black-box
+    occlusion sensitivity rather than EigenCAM's activation-reading. Not
+    called automatically on every upload -- one call here is grid_size**2
+    model forward passes, so this is meant to be triggered on demand for a
+    single inspection someone's actually looking at.
+    """
+    entry = _get_model_entry(model)
+    yolo_model = entry["model"]
+
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Uploaded file must be an image.")
+    if not (1 <= grid_size <= 12):
+        raise HTTPException(status_code=400, detail="grid_size must be between 1 and 12.")
+
+    try:
+        target_bbox = json.loads(bbox)
+        if not (isinstance(target_bbox, list) and len(target_bbox) == 4):
+            raise ValueError
+        target_bbox = [float(v) for v in target_bbox]
+    except (json.JSONDecodeError, ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="bbox must be a JSON array of 4 numbers: [x1, y1, x2, y2].")
+
+    contents = await file.read()
+    npimg = np.frombuffer(contents, np.uint8)
+    img = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
+    if img is None:
+        raise HTTPException(status_code=400, detail="Could not decode image.")
+
+    occlusion_map = compute_occlusion_map(yolo_model, img, target_bbox, grid_size=grid_size)
+    overlay = occlusion_map_to_overlay(img, occlusion_map)
+
+    success, buf = cv2.imencode(".png", overlay)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to encode occlusion overlay image.")
+    overlay_b64 = base64.b64encode(buf.tobytes()).decode("utf-8")
+
+    return {
+        "occlusion_grid": occlusion_map.tolist(),
+        "overlay_base64": overlay_b64,
+        "detection_found": bool(occlusion_map.max() > 0) if occlusion_map.size else False,
     }

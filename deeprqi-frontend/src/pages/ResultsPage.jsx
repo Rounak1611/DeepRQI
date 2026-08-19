@@ -4,6 +4,7 @@ import { getImage } from "../api/client";
 import RqiGauge from "../components/RqiGauge";
 import BoundingBoxOverlay from "../components/BoundingBoxOverlay";
 import DetectionList from "../components/DetectionList";
+import OcclusionExplainer from "../components/OcclusionExplainer";
 
 export default function ResultsPage() {
   const { imageId } = useParams();
@@ -167,6 +168,8 @@ export default function ResultsPage() {
           />
         </div>
       )}
+
+      <OcclusionExplainer imageId={image.id} detections={image.detections} />
     </div>
   );
 }
