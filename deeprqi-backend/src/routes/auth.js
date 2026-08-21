@@ -14,7 +14,7 @@ function signToken(user) {
 }
 
 router.post("/register", async (req, res) => {
-  const { name, email, password, role } = req.body;
+  const { name, email, password } = req.body;
 
   if (!name || !email || !password) {
     return res.status(400).json({ error: "name, email, and password are required." });
@@ -32,9 +32,13 @@ router.post("/register", async (req, res) => {
       name,
       email,
       passwordHash,
-      // Phase 1 only has two roles. Anything else falls back to INSPECTOR
-      // rather than trusting arbitrary client input.
-      role: role === "ADMIN" ? "ADMIN" : "INSPECTOR",
+      // Every self-registration is INSPECTOR, full stop -- a client-submitted
+      // `role` field is never read. Previously this trusted `role === "ADMIN"`
+      // from the request body, so anyone could sign up as ADMIN and see the
+      // dashboard-wide/repair-priority views. Promote someone to ADMIN
+      // manually (e.g. a direct DB update) until an invite-code or
+      // first-user-is-admin flow is built.
+      role: "INSPECTOR",
     },
   });
 

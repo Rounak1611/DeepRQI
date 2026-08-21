@@ -15,15 +15,24 @@ const ROW_HEIGHT = 42; // tall enough for the thumbnail plus a little breathing 
 // rather than let doc.image() throw and take down the whole report.
 const EMBEDDABLE_CONTENT_TYPES = new Set(["image/jpeg", "image/jpg", "image/png"]);
 
+// A road with a long inspection history would otherwise fetch every single
+// photo synchronously before rendering a single page -- fine for a handful
+// of test inspections, increasingly slow as real history accumulates. Cap
+// thumbnail fetches to the most recent N inspections (already the ones a
+// reader cares about most); older rows still render fully, just without a
+// photo, same as any other "fetch failed" row.
+const MAX_THUMBNAILS = 25;
+
 /**
  * Fetches each inspection's original photo (already persisted to Supabase
  * Storage -- Milestone 11) so it can be embedded as a small thumbnail.
  * Best-effort: a failed or unsupported-format fetch just means that row
- * renders without a photo, it never fails the whole report.
+ * renders without a photo, it never fails the whole report. Only the most
+ * recent MAX_THUMBNAILS inspections are fetched -- see above.
  */
 async function fetchThumbnails(inspections) {
 	const results = await Promise.all(
-		inspections.map(async (insp) => {
+		inspections.slice(0, MAX_THUMBNAILS).map(async (insp) => {
 			if (!insp.imagePath) return [insp.imagePath, null];
 			try {
 				const resp = await axios.get(insp.imagePath, { responseType: "arraybuffer" });

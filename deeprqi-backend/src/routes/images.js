@@ -8,6 +8,7 @@ const { requireAuth } = require("../middleware/auth");
 const { setRoadLocation, findRoadsNear } = require("../lib/geo");
 const { uploadBuffer } = require("../lib/storage");
 const { generateExplanation } = require("../lib/xaiSummary");
+const { fetchStoredImageBuffer, toDetectionCreateInput } = require("../lib/imageHelpers");
 
 const router = express.Router();
 
@@ -156,12 +157,7 @@ router.post("/upload", requireAuth, upload.single("file"), async (req, res) => {
         lat: lat ? parseFloat(lat) : null,
         lng: lng ? parseFloat(lng) : null,
         detections: {
-          create: detections.map((d) => ({
-            damageType: d.damage_type,
-            confidence: d.confidence,
-            severity: d.severity,
-            bbox: d.bbox,
-          })),
+          create: toDetectionCreateInput(detections),
         },
       },
       include: { detections: true },
@@ -207,18 +203,40 @@ router.get("/:id", requireAuth, async (req, res) => {
 // the AI service was down at upload time -- see the 502 branch above. This
 // path shape ("/pending/list", two segments) never collides with the
 // single-segment "/:id" route above regardless of declaration order.
+const PENDING_LIST_DEFAULT_LIMIT = 50;
+const PENDING_LIST_MAX_LIMIT = 200;
+
 router.get("/pending/list", requireAuth, async (req, res) => {
   const where = { scores: { none: {} } };
   // INSPECTORs only see their own pending uploads; ADMIN sees everyone's.
   if (req.user.role !== "ADMIN") {
     where.uploadedById = req.user.id;
   }
+
+  // Cursor pagination on id, ordered by uploadedAt desc -- this list has
+  // no natural cap (every AI-service outage adds to it), so an unbounded
+  // findMany would keep growing slower as real usage accumulates.
+  const rawLimit = parseInt(req.query.limit, 10);
+  const limit = Number.isFinite(rawLimit)
+    ? Math.min(Math.max(rawLimit, 1), PENDING_LIST_MAX_LIMIT)
+    : PENDING_LIST_DEFAULT_LIMIT;
+  const cursor = req.query.cursor ? { id: req.query.cursor } : undefined;
+
   const pending = await prisma.roadImage.findMany({
     where,
     include: { road: true },
     orderBy: { uploadedAt: "desc" },
+    take: limit + 1, // fetch one extra to know whether there's a next page
+    ...(cursor ? { cursor, skip: 1 } : {}),
   });
-  res.json(pending);
+
+  const hasMore = pending.length > limit;
+  const page = hasMore ? pending.slice(0, limit) : pending;
+
+  res.json({
+    pending: page,
+    nextCursor: hasMore ? page[page.length - 1].id : null,
+  });
 });
 
 // Re-run inference for a pending image. We never kept the original upload
@@ -241,8 +259,7 @@ router.post("/:id/retry", requireAuth, async (req, res) => {
 
   let imageBuffer;
   try {
-    const photoResp = await axios.get(roadImage.imagePath, { responseType: "arraybuffer" });
-    imageBuffer = Buffer.from(photoResp.data);
+    imageBuffer = await fetchStoredImageBuffer(roadImage.imagePath);
   } catch (err) {
     return res.status(502).json({ error: "Could not re-fetch the stored photo. Try again later." });
   }
@@ -277,12 +294,7 @@ router.post("/:id/retry", requireAuth, async (req, res) => {
       heatmapPath: heatmapUrl,
       modelUsed: model || roadImage.modelUsed || null,
       detections: {
-        create: detections.map((d) => ({
-          damageType: d.damage_type,
-          confidence: d.confidence,
-          severity: d.severity,
-          bbox: d.bbox,
-        })),
+        create: toDetectionCreateInput(detections),
       },
     },
     include: { detections: true },
@@ -317,8 +329,7 @@ router.post("/:id/compare", requireAuth, async (req, res) => {
 
   let imageBuffer;
   try {
-    const photoResp = await axios.get(roadImage.imagePath, { responseType: "arraybuffer" });
-    imageBuffer = Buffer.from(photoResp.data);
+    imageBuffer = await fetchStoredImageBuffer(roadImage.imagePath);
   } catch (err) {
     return res.status(502).json({ error: "Could not re-fetch the stored photo. Try again later." });
   }
@@ -358,14 +369,23 @@ router.post("/:id/occlusion", requireAuth, async (req, res) => {
   if (!Array.isArray(bbox) || bbox.length !== 4) {
     return res.status(400).json({ error: "bbox is required: [x1, y1, x2, y2]." });
   }
+  // Mirrors the AI service's own grid_size bound (app/main.py) -- checked
+  // here too so an out-of-range value fails immediately instead of paying
+  // for a photo re-fetch and an upload round-trip before being rejected.
+  // Bounded because cost is grid_size^2 model forward passes per call.
+  if (gridSize !== undefined) {
+    const parsed = Number(gridSize);
+    if (!Number.isInteger(parsed) || parsed < 1 || parsed > 12) {
+      return res.status(400).json({ error: "gridSize must be an integer between 1 and 12." });
+    }
+  }
 
   const roadImage = await prisma.roadImage.findUnique({ where: { id: req.params.id } });
   if (!roadImage) return res.status(404).json({ error: "Image not found." });
 
   let imageBuffer;
   try {
-    const photoResp = await axios.get(roadImage.imagePath, { responseType: "arraybuffer" });
-    imageBuffer = Buffer.from(photoResp.data);
+    imageBuffer = await fetchStoredImageBuffer(roadImage.imagePath);
   } catch (err) {
     return res.status(502).json({ error: "Could not re-fetch the stored photo. Try again later." });
   }

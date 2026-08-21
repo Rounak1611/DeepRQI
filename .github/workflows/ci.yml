@@ -1,0 +1,59 @@
+name: CI
+
+# This automates exactly what's already been done manually before every
+# change in this project (see CHAT_STATE.md's "full end-to-end repo scan"):
+# a syntax sweep across all three services, plus the one real committed
+# test file (deeprqi-ai-service/test_rqi_engine.py). There is no automated
+# suite for the backend/frontend yet -- everything else (degradation,
+# priority, occlusion, PDF rendering) has only ever been tested ad hoc, so
+# this workflow does not claim to cover it.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend-syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: node --check every backend .js file
+        run: |
+          find deeprqi-backend/src -name "*.js" -print0 | xargs -0 -n1 node --check
+
+  frontend-syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Parse every frontend .js/.jsx file with esbuild
+        run: |
+          npx --yes esbuild@0.24.0 --bundle=false --loader:.js=jsx \
+            $(find deeprqi-frontend/src -name "*.js" -o -name "*.jsx") \
+            --outdir=/tmp/esbuild-out
+
+  ai-service:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Compile-check every AI-service .py file
+        run: |
+          python -m compileall -q deeprqi-ai-service/app
+      - name: Run the RQI engine test
+        # Only needs python-dotenv (see app/config.py) -- deliberately not
+        # installing the full requirements.txt (torch/ultralytics/opencv),
+        # since this test never touches a model or an image.
+        run: |
+          pip install python-dotenv
+          cd deeprqi-ai-service
+          python test_rqi_engine.py

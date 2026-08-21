@@ -39,11 +39,21 @@ router.get("/stats", requireAuth, requireRole("ADMIN"), async (req, res) => {
 // / maintenance priority scoring" from the project roadmap. Both scoring
 // functions are heuristics, clearly labeled as estimates on the frontend,
 // not a real budgeting or scheduling tool.
+const PRIORITY_MAX_LIMIT = 500;
+
 router.get("/priority", requireAuth, requireRole("ADMIN"), async (req, res) => {
 	const roads = await prisma.road.findMany({
 		include: { images: { include: { scores: true } } },
 	});
-	res.json({ roads: rankRoadsByPriority(roads) });
+	// Ranking needs every road's full history up front (it's an urgency
+	// ordering, not something you can compute a page at a time), so the
+	// query above stays unbounded -- but the response is optionally capped
+	// to the top N after ranking, since callers usually only want the most
+	// urgent roads, not the whole city.
+	const ranked = rankRoadsByPriority(roads);
+	const rawLimit = parseInt(req.query.limit, 10);
+	const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), PRIORITY_MAX_LIMIT) : null;
+	res.json({ roads: limit ? ranked.slice(0, limit) : ranked, total: ranked.length });
 });
 
 module.exports = router;

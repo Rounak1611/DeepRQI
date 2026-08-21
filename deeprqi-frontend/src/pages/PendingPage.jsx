@@ -4,7 +4,9 @@ import { getPendingImages, retryImage } from "../api/client";
 
 export default function PendingPage() {
   const [pending, setPending] = useState([]);
+  const [nextCursor, setNextCursor] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
   const [retryingId, setRetryingId] = useState(null);
   const [retryErrors, setRetryErrors] = useState({});
@@ -14,7 +16,10 @@ export default function PendingPage() {
     (async () => {
       try {
         const data = await getPendingImages();
-        if (!cancelled) setPending(data);
+        if (!cancelled) {
+          setPending(data.pending);
+          setNextCursor(data.nextCursor);
+        }
       } catch (err) {
         if (!cancelled) setError("Could not load pending images.");
       } finally {
@@ -25,6 +30,19 @@ export default function PendingPage() {
       cancelled = true;
     };
   }, []);
+
+  async function handleLoadMore() {
+    setLoadingMore(true);
+    try {
+      const data = await getPendingImages(nextCursor);
+      setPending((prev) => [...prev, ...data.pending]);
+      setNextCursor(data.nextCursor);
+    } catch (err) {
+      setError("Could not load more pending images.");
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   async function handleRetry(id) {
     setRetryingId(id);
@@ -105,6 +123,18 @@ export default function PendingPage() {
                 ))}
               </tbody>
             </table>
+            {nextCursor && (
+              <div style={{ textAlign: "center", marginTop: "14px" }}>
+                <button
+                  onClick={handleLoadMore}
+                  disabled={loadingMore}
+                  className="btn-primary"
+                  style={{ padding: "6px 14px", borderRadius: "3px", fontSize: "13px" }}
+                >
+                  {loadingMore ? "Loading…" : "Load more"}
+                </button>
+              </div>
+            )}
           </div>
         )
       )}
